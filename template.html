@@ -1,0 +1,3892 @@
+<!doctype html>
+<html lang="hi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IMD SYNOP Decoder - भारतीय मौसम विभाग</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      body {
+        font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        min-height: 100vh;
+      }
+
+      /* Custom Glassy Scrollbar */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.3);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(56, 189, 248, 0.4);
+        border-color: rgba(56, 189, 248, 0.6);
+      }
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.15) rgba(0, 0, 0, 0.2);
+      }
+
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .core-glass-panel {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(28px) saturate(180%);
+        -webkit-backdrop-filter: blur(28px) saturate(180%);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.45),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3),
+          inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+      .station-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(12px) saturate(180%);
+        -webkit-backdrop-filter: blur(12px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-left: 4px solid #3b82f6;
+        border-radius: 1rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+      }
+      .station-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      }
+      .param-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+      }
+      .param-item {
+        background: rgba(59, 130, 246, 0.1);
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+      }
+      .param-label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .param-value {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #f8fafc;
+        margin-top: 0.25rem;
+      }
+      .code-badge {
+        font-family: "Courier New", monospace;
+        background: #0f172a;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        color: #60a5fa;
+      }
+      .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+      .summary-table th {
+        background: rgba(59, 130, 246, 0.2);
+        color: #60a5fa;
+        padding: 0.75rem;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+        position: sticky;
+        top: 0;
+      }
+      .summary-table td {
+        padding: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: #e2e8f0;
+      }
+      .summary-table tr:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .rh-highlight {
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+      }
+      .wb-highlight {
+        background: rgba(251, 146, 60, 0.2);
+        color: #fb923c;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+      }
+      .vis-highlight {
+        background: rgba(168, 85, 247, 0.2);
+        color: #c084fc;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+      }
+      .gmt-badge {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .date-badge {
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: 1px solid rgba(34, 197, 94, 0.3);
+      }
+      .month-badge {
+        background: rgba(251, 146, 60, 0.2);
+        color: #fb923c;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        border: 1px solid rgba(251, 146, 60, 0.3);
+      }
+      .cloud-cl {
+        color: #60a5fa;
+      }
+      .cloud-cm {
+        color: #c084fc;
+      }
+      .cloud-ch {
+        color: #f472b6;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.5s ease-out forwards;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 10px 0;
+      }
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        transition: width 0.3s ease;
+      }
+
+      /* Date Picker Styles */
+      .date-picker-popup {
+        display: none;
+        position: absolute;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(16px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        z-index: 50;
+        box-shadow:
+          0 25px 50px -12px rgba(0, 0, 0, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      }
+      .date-picker-popup.active {
+        display: block;
+      }
+      .date-picker-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+      .date-picker-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 0.25rem;
+        text-align: center;
+      }
+      .date-picker-day {
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+      }
+      .date-picker-day:hover {
+        background: rgba(59, 130, 246, 0.3);
+      }
+      .date-picker-day.selected {
+        background: #3b82f6;
+        color: white;
+      }
+      .date-picker-day.other-month {
+        color: #64748b;
+      }
+      .date-picker-day.today {
+        border: 2px solid #0ea5e9;
+        color: #0ea5e9;
+        font-weight: 700;
+      }
+      .date-picker-day.today.selected {
+        color: white;
+      }
+      .date-picker-weekday {
+        color: #94a3b8;
+        font-size: 0.75rem;
+        padding: 0.25rem;
+      }
+      .month-year-selector {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      .month-year-selector select {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        outline: none;
+      }
+      .month-year-selector select option {
+        background: #0f172a;
+      }
+
+      /* Modal Styles */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(10, 15, 30, 0.6);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        z-index: 100;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+      }
+      .modal-overlay.active {
+        display: flex;
+      }
+
+      /* Advanced Aurora Glassmorphism Backgrounds */
+      .glass-bg-orbs {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+        z-index: 0;
+        pointer-events: none;
+      }
+      .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(60px);
+        opacity: 0.3;
+        animation: floatOrbs 10s ease-in-out infinite alternate;
+      }
+      .orb-1 {
+        width: 400px;
+        height: 400px;
+        background: #a855f7;
+        top: -10%;
+        left: -10%;
+        animation-delay: 0s;
+      }
+      .orb-2 {
+        width: 500px;
+        height: 500px;
+        background: #3b82f6;
+        bottom: -20%;
+        right: -10%;
+        animation-delay: -2s;
+      }
+      .orb-3 {
+        width: 300px;
+        height: 300px;
+        background: #ec4899;
+        top: 40%;
+        right: 10%;
+        animation-delay: -4s;
+      }
+      .orb-4 {
+        width: 450px;
+        height: 450px;
+        background: #06b6d4;
+        bottom: 10%;
+        left: 20%;
+        animation-delay: -6s;
+      }
+
+      @keyframes floatOrbs {
+        0% {
+          transform: translate(0, 0) scale(1);
+        }
+        100% {
+          transform: translate(30px, -50px) scale(1.1);
+        }
+      }
+
+      .glass-particles {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: radial-gradient(
+          rgba(255, 255, 255, 0.2) 1px,
+          transparent 1px
+        );
+        background-size: 24px 24px;
+        opacity: 0.3;
+        animation: moveParticles 20s linear infinite;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      @keyframes moveParticles {
+        0% {
+          background-position: 0 0;
+        }
+        100% {
+          background-position: 48px 48px;
+        }
+      }
+
+      .modal-content {
+        position: relative;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(28px) saturate(180%);
+        -webkit-backdrop-filter: blur(28px) saturate(180%);
+        border-radius: 24px;
+        padding: 2rem;
+        max-width: 90vw;
+        max-height: 90vh;
+        overflow: auto;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.45),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3),
+          inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+      }
+      .glass-textarea,
+      .glass-compare-box {
+        background: rgba(255, 255, 255, 0.07) !important;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+        color: #ffffff !important;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        font-size: 0.95rem;
+        letter-spacing: 0.02em;
+        transition: all 0.3s ease;
+      }
+      .glass-textarea:focus {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        box-shadow:
+          inset 0 2px 10px rgba(0, 0, 0, 0.2),
+          0 0 15px rgba(255, 255, 255, 0.1) !important;
+      }
+      .glass-compare-teal {
+        background: rgba(20, 184, 166, 0.05) !important;
+        border-color: rgba(20, 184, 166, 0.2) !important;
+        border-top-color: rgba(20, 184, 166, 0.4) !important;
+        border-left-color: rgba(20, 184, 166, 0.4) !important;
+      }
+      .glass-compare-indigo {
+        background: rgba(99, 102, 241, 0.05) !important;
+        border-color: rgba(99, 102, 241, 0.2) !important;
+        border-top-color: rgba(99, 102, 241, 0.4) !important;
+        border-left-color: rgba(99, 102, 241, 0.4) !important;
+      }
+      .glass-compare-purple {
+        background: rgba(168, 85, 247, 0.05) !important;
+        border-color: rgba(168, 85, 247, 0.2) !important;
+        border-top-color: rgba(168, 85, 247, 0.4) !important;
+        border-left-color: rgba(168, 85, 247, 0.4) !important;
+      }
+
+      .modal-content button:not(.close-btn) {
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+      .modal-content button:not(.close-btn):hover {
+        transform: translateY(-2px);
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+      }
+      .close-btn {
+        background: none;
+        border: none;
+        color: #94a3b8;
+        font-size: 1.5rem;
+        cursor: pointer;
+      }
+      .close-btn:hover {
+        color: white;
+      }
+      .view-toggle {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      .view-toggle button {
+        padding: 0.5rem 1rem;
+        border-radius: 0.375rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .view-toggle button.active {
+        background: rgba(59, 130, 246, 0.4);
+        border-color: rgba(59, 130, 246, 0.6);
+        color: white;
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+      }
+
+      /* Toast Animations */
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+      .toast-enter {
+        animation: slideInRight 0.3s ease-out forwards;
+      }
+      .toast-exit {
+        animation: fadeOut 0.3s ease-out forwards;
+      }
+
+      /* Footer Styles */
+      .advanced-footer {
+        background: linear-gradient(
+          135deg,
+          rgba(15, 23, 42, 0.8) 0%,
+          rgba(30, 41, 59, 0.95) 100%
+        );
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1rem;
+        padding: 2rem 1rem;
+        text-align: center;
+        margin-top: 3rem;
+      }
+      .footer-container {
+        max-width: 800px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+      }
+      .analysis-label {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 0.5rem;
+        display: block;
+      }
+      .highlight-name {
+        color: #fff;
+        font-weight: 800;
+        font-size: 1.5rem;
+        text-shadow:
+          0 0 5px #0ea5e9,
+          0 0 10px #0ea5e9,
+          0 0 20px #0ea5e9,
+          0 0 40px #0284c7;
+        margin: 0 5px;
+        animation: neon-pulse 1.5s infinite alternate;
+        display: inline-block;
+      }
+      @keyframes neon-pulse {
+        from {
+          text-shadow:
+            0 0 5px #0ea5e9,
+            0 0 10px #0ea5e9,
+            0 0 20px #0ea5e9;
+        }
+        to {
+          text-shadow:
+            0 0 2px #0ea5e9,
+            0 0 5px #0ea5e9,
+            0 0 10px #0ea5e9;
+        }
+      }
+
+      /* Light Theme Overrides */
+      body.light-theme {
+        background: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+        color: #102a43;
+      }
+      body.light-theme .glass-panel,
+      body.light-theme .core-glass-panel,
+      body.light-theme .station-card,
+      body.light-theme .modal-content,
+      body.light-theme .date-picker-popup {
+        background: rgba(255, 255, 255, 0.85) !important;
+        border-color: rgba(0, 0, 0, 0.1) !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05) !important;
+      }
+      body.light-theme .text-white:not(button):not(a) {
+        color: #102a43 !important;
+      }
+      body.light-theme .text-slate-200,
+      body.light-theme .text-slate-300,
+      body.light-theme .text-slate-400,
+      body.light-theme .text-slate-500 {
+        color: #334e68 !important;
+      }
+      body.light-theme .glass-textarea,
+      body.light-theme .glass-compare-box {
+        background: #ffffff !important;
+        color: #102a43 !important;
+        border-color: rgba(0, 0, 0, 0.15) !important;
+      }
+      body.light-theme .glass-textarea:focus {
+        border-color: rgba(59, 130, 246, 0.6) !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+      }
+      body.light-theme .param-value {
+        color: #102a43 !important;
+      }
+      body.light-theme .code-badge {
+        background: #e2e8f0;
+        color: #1d4ed8;
+      }
+      body.light-theme .summary-table td {
+        border-color: rgba(0, 0, 0, 0.1);
+        color: #334e68;
+      }
+      body.light-theme .summary-table tr:hover {
+        background: rgba(0, 0, 0, 0.03);
+      }
+      body.light-theme .advanced-footer {
+        background: linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.9) 0%,
+          rgba(240, 244, 248, 0.95) 100%
+        );
+        border-color: rgba(0, 0, 0, 0.1);
+      }
+      body.light-theme .highlight-name {
+        color: #0284c7;
+        text-shadow: none;
+      }
+      body.light-theme .date-picker-day:hover {
+        background: rgba(59, 130, 246, 0.1);
+      }
+      body.light-theme .date-picker-day.selected {
+        background: #3b82f6;
+        color: white !important;
+      }
+      body.light-theme select option.bg-slate-900 {
+        background: #ffffff !important;
+        color: #102a43 !important;
+      }
+      body.light-theme .view-toggle button {
+        color: #334e68 !important;
+        background: rgba(0, 0, 0, 0.05);
+        border-color: rgba(0, 0, 0, 0.1);
+      }
+      body.light-theme .view-toggle button.active {
+        color: #ffffff !important;
+        background: rgba(59, 130, 246, 0.8);
+      }
+      body.light-theme .param-item {
+        background: rgba(59, 130, 246, 0.05);
+        border-color: rgba(59, 130, 246, 0.15);
+      }
+      body.light-theme .glass-bg-orbs {
+        opacity: 0.15;
+      }
+
+      .data-source-bar {
+        font-size: 0.9rem;
+        color: #94a3b8;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding-top: 1.5rem;
+        width: 100%;
+      }
+      .source-highlight {
+        color: #fbbf24;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body class="text-slate-200 p-4 md:p-8 relative">
+    <!-- Main Background Effects -->
+    <div class="fixed inset-0 z-[-1] pointer-events-none overflow-hidden">
+      <div class="glass-bg-orbs opacity-40">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+      </div>
+      <div class="glass-particles opacity-30"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto relative z-10">
+      <!-- Sticky Header Panel -->
+      <div
+        class="sticky top-0 z-50 glass-panel rounded-xl mb-8 flex items-center justify-between p-3 md:p-4 shadow-xl"
+      >
+        <!-- Left side: Logo + Main Home Button -->
+        <div
+          class="flex flex-col items-center justify-center w-20 md:w-32 shrink-0 gap-2"
+        >
+          <img
+            src="logo/logo.png"
+            alt="IMD Logo"
+            class="h-12 md:h-20 object-contain"
+          />
+          <a
+            href="https://biharmausam.com/"
+            class="inline-flex items-center justify-center gap-1 md:gap-2 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-[9px] md:text-xs font-bold py-1 px-2 md:py-1.5 md:px-3 rounded-full shadow-lg shadow-pink-500/30 transition-all transform hover:scale-105 group border border-pink-400/50 w-max"
+          >
+            <i
+              class="fas fa-home transition-transform duration-300 group-hover:scale-125 group-hover:-translate-y-0.5"
+            ></i>
+            Main Home
+          </a>
+        </div>
+
+        <!-- Center side: Text Content -->
+        <div
+          class="flex-1 flex flex-col items-center justify-center px-2 md:px-4 text-center"
+        >
+          <p
+            class="text-[10px] md:text-sm font-semibold text-slate-300 leading-tight"
+          >
+            भारत सरकार | पृथ्वी विज्ञान मंत्रालय
+          </p>
+          <h2
+            class="text-xs md:text-xl font-bold text-white md:my-1 leading-tight"
+          >
+            भारत मौसम विज्ञान विभाग
+          </h2>
+          <p class="text-[10px] md:text-sm text-slate-300 leading-tight">
+            मौसम विज्ञान केंद्र, अनिसाबाद पटना – 800002
+          </p>
+          <a
+            href="https://mausam.imd.gov.in/patna"
+            target="_blank"
+            class="text-[10px] md:text-sm text-blue-400 hover:text-blue-300 font-medium inline-block mt-1 md:mt-2"
+            >🌐 mausam.imd.gov.in/patna</a
+          >
+        </div>
+
+        <!-- Right side: 150 Years Logo -->
+        <div
+          class="flex flex-col items-center justify-center w-20 md:w-32 shrink-0 gap-1 md:gap-2"
+        >
+          <img
+            src="logo/IMD_150_Year_Logo.png"
+            alt="IMD 150 Years"
+            class="h-12 md:h-20 object-contain"
+          />
+          <button
+            id="themeToggleBtn"
+            onclick="toggleTheme()"
+            class="text-amber-400 hover:text-amber-300 transition-colors p-1"
+            title="Toggle Light/Dark Mode"
+          >
+            <i class="fas fa-sun text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="text-center mb-8">
+        <h1
+          class="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent"
+        >
+          IMD SYNOP Decoder
+        </h1>
+        <p class="text-slate-400 text-lg">
+          भारतीय मौसम विभाग - सतह मौसम अवलोकन डिकोडर
+        </p>
+      </div>
+
+      <!-- Input Section -->
+      <div class="core-glass-panel p-6 mb-8">
+        <div class="flex flex-col md:flex-row gap-4 mb-4">
+          <div class="flex-1">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-sm font-medium text-slate-300"
+                >SYNOP Data Paste करें (Supports 30,000+ lines)</label
+              >
+              <select
+                id="exampleSelector"
+                onchange="handleExampleSelection(this)"
+                class="glass-textarea !py-1 !px-3 rounded-lg text-sm outline-none cursor-pointer"
+              >
+                <option value="" class="bg-slate-900 text-white">
+                  -- Load Example Data --
+                </option>
+                <option value="short" class="bg-slate-900 text-white">
+                  Short Example
+                </option>
+                <option value="long" class="bg-slate-900 text-white">
+                  Load Long Example (TestSynop.txt)
+                </option>
+              </select>
+            </div>
+            <textarea
+              id="synopInput"
+              rows="10"
+              class="w-full glass-textarea rounded-xl p-5 font-mono text-sm outline-none resize-y leading-relaxed shadow-inner"
+            ></textarea>
+            <div class="progress-bar hidden" id="progressBar">
+              <div
+                class="progress-fill"
+                id="progressFill"
+                style="width: 0%"
+              ></div>
+            </div>
+            <div
+              id="processingStatus"
+              class="text-sm text-slate-400 mt-2 hidden"
+            ></div>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button
+            onclick="formatForSubmission()"
+            class="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2 px-6 rounded-lg transition-all shadow-lg shadow-teal-500/30"
+          >
+            <span class="block"
+              ><i class="fas fa-magic mr-2"></i>Submission System</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Alt+S)</span
+            >
+          </button>
+          <button
+            onclick="formatMinimalSynopData()"
+            class="bg-purple-600 hover:bg-purple-500 text-white font-semibold py-2 px-6 rounded-lg transition-all shadow-lg shadow-purple-500/30"
+          >
+            <span class="block"
+              ><i class="fas fa-cloud-sun mr-2"></i>Synop</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Ctrl+M)</span
+            >
+          </button>
+          <button
+            onclick="formatSynopData()"
+            class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-6 rounded-lg transition-all shadow-lg shadow-indigo-500/30"
+          >
+            <span class="block"
+              ><i class="fas fa-file-alt mr-2"></i>Formatted Synop</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Alt+F)</span
+            >
+          </button>
+          <button
+            onclick="decodeAndStoreSynop()"
+            class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold py-2 px-8 rounded-lg transition-all transform hover:scale-105 shadow-lg shadow-blue-500/30"
+          >
+            <span class="block"
+              ><i class="fas fa-save mr-2"></i>Decode & Store करें</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Ctrl+Enter)</span
+            >
+          </button>
+          <button
+            onclick="clearAll()"
+            class="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+          >
+            <span class="block"
+              ><i class="fas fa-trash-alt mr-2"></i>Clear</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Alt+C)</span
+            >
+          </button>
+          <button
+            onclick="showDatabaseView()"
+            class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+          >
+            <span class="block"
+              ><i class="fas fa-database mr-2"></i>Database View</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Alt+D)</span
+            >
+          </button>
+          <button
+            onclick="exportDatabase()"
+            class="bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+          >
+            <span class="block"
+              ><i class="fas fa-download mr-2"></i>Export JSON</span
+            >
+            <span class="block text-[10px] font-normal opacity-80 mt-0.5"
+              >(Alt+E)</span
+            >
+          </button>
+        </div>
+      </div>
+
+      <!-- Database View -->
+      <div id="databaseView" class="hidden mb-8">
+        <div class="core-glass-panel p-6 mb-6">
+          <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <i class="fas fa-database text-green-400"></i>Stored SYNOP Database
+          </h2>
+
+          <!-- Advanced Date Picker -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 relative">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2"
+                >Select Date</label
+              >
+              <div class="relative">
+                <input
+                  type="text"
+                  id="selectDate"
+                  readonly
+                  placeholder="Click to select date"
+                  class="glass-textarea rounded-lg px-4 py-2 w-full cursor-pointer outline-none"
+                  onclick="toggleDatePicker()"
+                />
+                <i
+                  class="fas fa-calendar absolute right-3 top-3 text-slate-500"
+                ></i>
+
+                <!-- Date Picker Popup -->
+                <div id="datePickerPopup" class="date-picker-popup">
+                  <div class="date-picker-header">
+                    <button
+                      onclick="changeYear(-1)"
+                      class="text-slate-400 hover:text-white"
+                    >
+                      <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <div class="month-year-selector">
+                      <select id="monthSelect" onchange="renderCalendar()">
+                        <option value="0">January</option>
+                        <option value="1">February</option>
+                        <option value="2">March</option>
+                        <option value="3">April</option>
+                        <option value="4">May</option>
+                        <option value="5">June</option>
+                        <option value="6">July</option>
+                        <option value="7">August</option>
+                        <option value="8">September</option>
+                        <option value="9">October</option>
+                        <option value="10">November</option>
+                        <option value="11">December</option>
+                      </select>
+                      <select id="yearSelect" onchange="renderCalendar()">
+                        <!-- Years populated by JS -->
+                      </select>
+                    </div>
+                    <button
+                      onclick="changeYear(1)"
+                      class="text-slate-400 hover:text-white"
+                    >
+                      <i class="fas fa-chevron-right"></i>
+                    </button>
+                  </div>
+                  <div class="date-picker-grid" id="calendarGrid">
+                    <!-- Calendar populated by JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2"
+                >Select GMT</label
+              >
+              <select
+                id="selectGMT"
+                class="glass-textarea rounded-lg px-4 py-2 w-full outline-none"
+              >
+                <option value="all" class="bg-slate-900 text-white">
+                  All GMT
+                </option>
+                <option value="00" class="bg-slate-900 text-white">
+                  00 GMT
+                </option>
+                <option value="03" class="bg-slate-900 text-white">
+                  03 GMT
+                </option>
+                <option value="06" class="bg-slate-900 text-white">
+                  06 GMT
+                </option>
+                <option value="09" class="bg-slate-900 text-white">
+                  09 GMT
+                </option>
+                <option value="12" class="bg-slate-900 text-white">
+                  12 GMT
+                </option>
+                <option value="15" class="bg-slate-900 text-white">
+                  15 GMT
+                </option>
+                <option value="18" class="bg-slate-900 text-white">
+                  18 GMT
+                </option>
+                <option value="21" class="bg-slate-900 text-white">
+                  21 GMT
+                </option>
+              </select>
+            </div>
+
+            <div class="flex items-end gap-2">
+              <button
+                onclick="loadDateData()"
+                class="bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 px-4 rounded-lg transition-all w-full"
+              >
+                Load Data
+              </button>
+              <button
+                onclick="exportToExcel()"
+                class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2 px-4 rounded-lg transition-all"
+                title="Export to Excel"
+              >
+                <i class="fas fa-file-excel"></i>
+              </button>
+            </div>
+
+            <div class="flex items-end">
+              <button
+                onclick="show0312Table()"
+                class="bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 px-4 rounded-lg transition-all w-full text-sm"
+              >
+                <i class="fas fa-table mr-2"></i>03 & 12 GMT Table
+              </button>
+            </div>
+          </div>
+
+          <!-- Available Dates -->
+          <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white mb-3">
+              Available Dates:
+            </h3>
+            <div
+              id="availableDatesList"
+              class="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-slate-900 rounded-lg"
+            ></div>
+          </div>
+
+          <!-- Date Range -->
+          <div class="core-glass-panel p-4 mb-6">
+            <h3 class="text-lg font-semibold text-white mb-3">
+              Date Range Comparison
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1"
+                  >From Date</label
+                >
+                <input
+                  type="text"
+                  id="fromDate"
+                  placeholder="DD-MM-YYYY"
+                  class="glass-textarea rounded-lg px-3 py-2 w-full text-sm outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">To Date</label>
+                <input
+                  type="text"
+                  id="toDate"
+                  placeholder="DD-MM-YYYY"
+                  class="glass-textarea rounded-lg px-3 py-2 w-full text-sm outline-none"
+                />
+              </div>
+              <div class="flex items-end">
+                <button
+                  onclick="compareDates()"
+                  class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-4 rounded-lg transition-all w-full text-sm"
+                >
+                  Compare
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stored Data Display -->
+          <div id="storedDataDisplay" class="space-y-6"></div>
+        </div>
+      </div>
+
+      <!-- Detail Modal -->
+      <div id="detailModal" class="modal-overlay">
+        <div class="glass-bg-orbs">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+          <div class="orb orb-4"></div>
+        </div>
+        <div class="glass-particles"></div>
+        <div class="modal-content w-full max-w-4xl">
+          <div class="modal-header">
+            <h2 class="text-2xl font-bold text-white" id="modalTitle">
+              Station Details
+            </h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+          </div>
+          <div class="view-toggle">
+            <button class="active" onclick="showModalView('table')">
+              Table View
+            </button>
+            <button onclick="showModalView('detailed')">Detailed View</button>
+          </div>
+          <div id="modalBody"></div>
+        </div>
+      </div>
+
+      <!-- Submission Review Modal -->
+      <div id="submissionModal" class="modal-overlay">
+        <div class="glass-bg-orbs">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+          <div class="orb orb-4"></div>
+        </div>
+        <div class="glass-particles"></div>
+        <div class="modal-content w-full max-w-4xl">
+          <div class="modal-header">
+            <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+              <i class="fas fa-magic text-teal-400"></i> Formatted Data Review
+            </h2>
+            <button class="close-btn" onclick="closeSubmissionModal()">
+              &times;
+            </button>
+          </div>
+          <div class="view-toggle mb-4 items-center flex-wrap">
+            <div class="flex gap-2">
+              <button
+                id="btnSubRawView"
+                class="active"
+                onclick="switchSubmissionView('raw')"
+              >
+                Raw Text
+              </button>
+              <button
+                id="btnSubCompareView"
+                onclick="switchSubmissionView('compare')"
+              >
+                Side-by-Side Compare
+              </button>
+            </div>
+            <label
+              class="flex items-center text-sm text-slate-300 cursor-pointer ml-auto mt-2 sm:mt-0"
+            >
+              <input
+                type="checkbox"
+                id="subLineBreakToggle"
+                class="mr-2 w-4 h-4 rounded bg-slate-900 border-slate-700 text-teal-500 focus:ring-teal-500"
+                onchange="updateSubmissionOutput()"
+              />
+              Add Line Breaks
+            </label>
+          </div>
+          <div id="subRawViewContainer" class="mb-4">
+            <p class="text-slate-400 text-sm mb-2">
+              नीचे दिए गए डेटा से सभी कमेंट्स हटा दिए गए हैं। आप इसे यहाँ चेक
+              करके कॉपी कर सकते हैं:
+            </p>
+            <textarea
+              id="submissionOutput"
+              rows="15"
+              class="w-full glass-textarea rounded-xl p-5 font-mono text-sm outline-none resize-y leading-relaxed"
+              readonly
+            ></textarea>
+          </div>
+          <div
+            id="subCompareViewContainer"
+            class="mb-4 hidden max-h-[60vh] overflow-y-auto pr-2"
+          ></div>
+          <div class="flex justify-end gap-3">
+            <button
+              onclick="closeSubmissionModal()"
+              class="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onclick="copySubmissionText()"
+              class="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2 px-6 rounded-lg transition-all shadow-lg shadow-teal-500/30"
+            >
+              <i class="fas fa-copy mr-2"></i>Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formatted Synop Review Modal -->
+      <div id="formattedModal" class="modal-overlay">
+        <div class="glass-bg-orbs">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+          <div class="orb orb-4"></div>
+        </div>
+        <div class="glass-particles"></div>
+        <div class="modal-content w-full max-w-4xl">
+          <div class="modal-header">
+            <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+              <i class="fas fa-file-alt text-indigo-400"></i> Formatted SYNOP
+              Review
+            </h2>
+            <button class="close-btn" onclick="closeFormattedModal()">
+              &times;
+            </button>
+          </div>
+          <div class="view-toggle mb-4 items-center flex-wrap">
+            <div class="flex gap-2">
+              <button
+                id="btnRawView"
+                class="active"
+                onclick="switchFormattedView('raw')"
+              >
+                Raw Text
+              </button>
+              <button
+                id="btnCompareView"
+                onclick="switchFormattedView('compare')"
+              >
+                Side-by-Side Compare
+              </button>
+            </div>
+            <label
+              class="flex items-center text-sm text-slate-300 cursor-pointer ml-auto mt-2 sm:mt-0"
+            >
+              <input
+                type="checkbox"
+                id="fmtLineBreakToggle"
+                class="mr-2 w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-500 focus:ring-indigo-500"
+                onchange="updateFormattedOutput()"
+              />
+              Add Line Breaks
+            </label>
+          </div>
+          <div id="rawViewContainer" class="mb-4">
+            <p class="text-slate-400 text-sm mb-2">
+              नीचे दिए गए डेटा को सही फॉर्मेट में व्यवस्थित कर दिया गया है। आप
+              इसे यहाँ चेक करके कॉपी कर सकते हैं:
+            </p>
+            <textarea
+              id="formattedOutput"
+              rows="15"
+              class="w-full glass-textarea rounded-xl p-5 font-mono text-sm outline-none resize-y leading-relaxed"
+              readonly
+            ></textarea>
+          </div>
+          <div
+            id="compareViewContainer"
+            class="mb-4 hidden max-h-[60vh] overflow-y-auto pr-2"
+          ></div>
+          <div class="flex justify-end gap-3">
+            <button
+              onclick="closeFormattedModal()"
+              class="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onclick="copyFormattedText()"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-6 rounded-lg transition-all shadow-lg shadow-indigo-500/30"
+            >
+              <i class="fas fa-copy mr-2"></i>Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Minimal Synop Modal -->
+      <div id="minimalSynopModal" class="modal-overlay">
+        <div class="glass-bg-orbs">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+          <div class="orb orb-4"></div>
+        </div>
+        <div class="glass-particles"></div>
+        <div class="modal-content w-full max-w-4xl">
+          <div class="modal-header">
+            <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+              <i class="fas fa-cloud-sun text-purple-400"></i> Synop Data Review
+            </h2>
+            <button class="close-btn" onclick="closeMinimalSynopModal()">
+              &times;
+            </button>
+          </div>
+          <div class="view-toggle mb-4 items-center flex-wrap">
+            <div class="flex gap-2">
+              <button
+                id="btnMinRawView"
+                class="active"
+                onclick="switchMinimalSynopView('raw')"
+              >
+                Raw Text
+              </button>
+              <button
+                id="btnMinCompareView"
+                onclick="switchMinimalSynopView('compare')"
+              >
+                Side-by-Side Compare
+              </button>
+            </div>
+            <label
+              class="flex items-center text-sm text-slate-300 cursor-pointer ml-auto mt-2 sm:mt-0"
+            >
+              <input
+                type="checkbox"
+                id="minLineBreakToggle"
+                class="mr-2 w-4 h-4 rounded bg-slate-900 border-slate-700 text-purple-500 focus:ring-purple-500"
+                onchange="updateMinimalSynopOutput()"
+              />
+              Add Line Breaks
+            </label>
+          </div>
+          <div id="minRawViewContainer" class="mb-4">
+            <p class="text-slate-400 text-sm mb-2">
+              नीचे दिए गए डेटा को सही फॉर्मेट में व्यवस्थित कर दिया गया है
+              (सिर्फ WB, RH, और R/F)। आप इसे यहाँ चेक करके कॉपी कर सकते हैं:
+            </p>
+            <textarea
+              id="minimalSynopOutput"
+              rows="15"
+              class="w-full glass-textarea rounded-xl p-5 font-mono text-sm outline-none resize-y leading-relaxed"
+              readonly
+            ></textarea>
+          </div>
+          <div
+            id="minCompareViewContainer"
+            class="mb-4 hidden max-h-[60vh] overflow-y-auto pr-2"
+          ></div>
+          <div class="flex justify-end gap-3">
+            <button
+              onclick="closeMinimalSynopModal()"
+              class="bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 px-6 rounded-lg transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onclick="copyMinimalSynopText()"
+              class="bg-purple-600 hover:bg-purple-500 text-white font-semibold py-2 px-6 rounded-lg transition-all shadow-lg shadow-purple-500/30"
+            >
+              <i class="fas fa-copy mr-2"></i>Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 & 12 GMT Special Table -->
+      <div id="special0312Table" class="hidden mb-8">
+        <div class="core-glass-panel p-6 !border-amber-500/50">
+          <div class="flex justify-between items-center mb-4">
+            <h2
+              class="text-xl font-bold text-white flex items-center gap-2 text-amber-400"
+            >
+              <i class="fas fa-star"></i>03 & 12 GMT Special Summary
+            </h2>
+            <button
+              onclick="export0312ToExcel()"
+              class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2 px-4 rounded-lg text-sm"
+            >
+              <i class="fas fa-file-excel mr-2"></i>Export Excel
+            </button>
+          </div>
+          <div class="overflow-x-auto max-h-96 overflow-y-auto">
+            <table class="summary-table" id="table0312">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>GMT</th>
+                  <th>Station</th>
+                  <th>Temp</th>
+                  <th>Max</th>
+                  <th>Min</th>
+                  <th>WB</th>
+                  <th>RH</th>
+                  <th>Pressure</th>
+                  <th>Visibility</th>
+                  <th>Wind</th>
+                  <th>Weather</th>
+                  <th>Clouds</th>
+                </tr>
+              </thead>
+              <tbody id="tbody0312"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Results -->
+      <div id="currentResults">
+        <div
+          id="dateTimeInfo"
+          class="hidden mb-6 core-glass-panel p-4 !border-l-4 !border-l-cyan-500"
+        >
+          <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <span class="text-slate-400 text-sm"
+                >Observation Date & Time</span
+              >
+              <div class="flex items-center gap-3 mt-1 flex-wrap">
+                <span class="month-badge" id="monthDisplay">--</span>
+                <span class="date-badge" id="obsDateDisplay">--</span>
+                <span class="gmt-badge" id="obsTimeDisplay">-- GMT</span>
+              </div>
+            </div>
+            <div class="flex gap-6 text-sm flex-wrap">
+              <div>
+                <span class="text-slate-500">Report Type:</span
+                ><span class="text-white font-semibold ml-2">AAXX</span>
+              </div>
+              <div>
+                <span class="text-slate-500">Wind Unit:</span
+                ><span
+                  id="windUnit"
+                  class="text-white font-semibold ml-2"
+                ></span>
+              </div>
+              <div>
+                <span class="text-slate-500">Stations:</span
+                ><span id="totalStations" class="text-white font-semibold ml-2"
+                  >0</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="summarySection"
+          class="hidden mb-8 core-glass-panel p-6 overflow-hidden"
+        >
+          <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <i class="fas fa-chart-line text-blue-400"></i> Data Visualization
+            Dashboard
+          </h2>
+
+          <!-- Parameter-wise Line Charts -->
+          <div
+            id="parameterChartsContainer"
+            class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10"
+          >
+            <!-- Dynamically populated line charts for Temp, WB, RH, Press, Max, Min -->
+          </div>
+        </div>
+
+        <div id="resultsContainer" class="space-y-6"></div>
+      </div>
+
+      <div id="emptyState" class="text-center py-20">
+        <div class="text-6xl mb-4">🌤️</div>
+        <h3 class="text-xl font-semibold text-slate-400">
+          SYNOP Data का इंतजार है
+        </h3>
+        <p class="text-slate-500 mt-2">
+          ऊपर दिए गए बॉक्स में अपना डेटा पेस्ट करें
+        </p>
+      </div>
+
+      <!-- Toast Notification Container -->
+      <div
+        id="toast-container"
+        class="fixed bottom-5 right-5 z-[1000] flex flex-col gap-2"
+      ></div>
+
+      <!-- Footer -->
+      <footer class="advanced-footer">
+        <div class="footer-container">
+          <div class="analysis-section">
+            <span class="analysis-label">विश्लेषण एवं विकास</span>
+            <div class="text-lg leading-relaxed">
+              तैयार किया गया: <span class="highlight-name">Lal Kamal</span
+              ><br />
+              <span class="text-slate-400 text-sm mt-1 block"
+                >Meteorological Centre, Patna (IMD)</span
+              >
+            </div>
+          </div>
+
+          <div class="data-source-bar">
+            डेटा स्रोत:
+            <span class="source-highlight"
+              >India Meteorological Department (IMD)</span
+            ><br />
+            <span class="mt-2 block">&copy; 2026 | All Rights Reserved</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      // Database
+      let synopDatabase =
+        JSON.parse(localStorage.getItem("synopDatabase")) || {};
+      let currentExcelData = []; // For Excel export
+
+      // Cloud Type Names
+      const cloudNames = {
+        CL: {
+          0: "No low clouds",
+          1: "Cumulus humilis",
+          2: "Cumulus mediocris",
+          3: "Cumulonimbus (no anvil)",
+          4: "Stratocumulus from Cumulus",
+          5: "Stratocumulus",
+          6: "Stratus",
+          7: "Fractus (bad weather)",
+          8: "Cumulus & Stratocumulus",
+          9: "Cumulonimbus (with anvil)",
+        },
+        CM: {
+          0: "No medium clouds",
+          1: "Altostratus semitransparent",
+          2: "Altostratus/Nimbostratus",
+          3: "Altocumulus semitransparent",
+          4: "Altocumulus patches",
+          5: "Altocumulus bands",
+          6: "Altocumulus from Cumulus",
+          7: "Altocumulus multiple layers",
+          8: "Altocumulus with towers",
+          9: "Altocumulus chaotic",
+        },
+        CH: {
+          0: "No high clouds",
+          1: "Cirrus filaments",
+          2: "Dense Cirrus",
+          3: "Cirrus anvil remains",
+          4: "Cirrus invading sky",
+          5: "Cirrus bands <45°",
+          6: "Cirrus bands >45°",
+          7: "Cirrostratus covering sky",
+          8: "Cirrostratus not invading",
+          9: "Cirrocumulus",
+        },
+      };
+
+      const monthMap = {
+        JAN: "01",
+        FEB: "02",
+        MAR: "03",
+        APR: "04",
+        MAY: "05",
+        JUN: "06",
+        JUL: "07",
+        AUG: "08",
+        SEP: "09",
+        OCT: "10",
+        NOV: "11",
+        DEC: "12",
+      };
+      const monthNames = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+
+      let currentMonth = new Date().getMonth();
+      let currentYear = new Date().getFullYear();
+      let selectedDateObj = null;
+
+      const stationNames = {
+        42492: "Patna",
+        42591: "Gaya",
+        42498: "Bhagalpur",
+        42500: "Purnea",
+        42283: "Valmiki Nagar",
+        42395: "Forbesganj",
+        42588: "Dehri",
+        42383: "Motihari",
+        42393: "Supaul",
+        42391: "Darbhanga",
+        42488: "Chapra",
+        42387: "Muzaffarpur",
+        42499: "Sabour",
+      };
+
+      const codeTables = {
+        windDir: {
+          "00": "Calm",
+          "02": "NNE",
+          "05": "NE",
+          "07": "ENE",
+          "09": "E",
+          11: "ESE",
+          14: "SE",
+          16: "SSE",
+          18: "S",
+          20: "SSW",
+          23: "SW",
+          25: "WSW",
+          27: "W",
+          29: "WNW",
+          32: "NW",
+          34: "NNW",
+          36: "N",
+          99: "Var",
+        },
+        cloudAmount: {
+          0: "0/8",
+          1: "1/8",
+          2: "2/8",
+          3: "3/8",
+          4: "4/8",
+          5: "5/8",
+          6: "6/8",
+          7: "7/8",
+          8: "8/8",
+          9: "Obsc",
+        },
+        presentWeather: {
+          "00": "Clear",
+          "01": "Clouds↓",
+          "02": "Same",
+          "03": "Clouds↑",
+          "05": "Haze",
+          10: "Mist",
+          50: "Drizzle",
+          60: "Rain",
+          61: "Rain Mod",
+          62: "Rain Hvy",
+          70: "Snow",
+          80: "Showers",
+          95: "T-Storm",
+        },
+      };
+
+      // Date Picker Functions
+      function initDatePicker() {
+        const yearSelect = document.getElementById("yearSelect");
+        const currentY = new Date().getFullYear();
+        for (let y = currentY - 5; y <= currentY + 1; y++) {
+          const option = document.createElement("option");
+          option.value = y;
+          option.textContent = y;
+          if (y === currentYear) option.selected = true;
+          yearSelect.appendChild(option);
+        }
+        document.getElementById("monthSelect").value = currentMonth;
+        renderCalendar();
+      }
+
+      function renderCalendar() {
+        const month = parseInt(document.getElementById("monthSelect").value);
+        const year = parseInt(document.getElementById("yearSelect").value);
+        const grid = document.getElementById("calendarGrid");
+
+        grid.innerHTML = "";
+
+        // Weekday headers
+        const weekdays = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+        weekdays.forEach((d) => {
+          const div = document.createElement("div");
+          div.className = "date-picker-weekday";
+          div.textContent = d;
+          grid.appendChild(div);
+        });
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+        // Previous month days
+        for (let i = firstDay - 1; i >= 0; i--) {
+          const div = document.createElement("div");
+          div.className = "date-picker-day other-month";
+          div.textContent = daysInPrevMonth - i;
+          grid.appendChild(div);
+        }
+
+        // Current month days
+        const today = new Date();
+        const currentDay = today.getDate();
+        const currentMonthIdx = today.getMonth();
+        const currentYearVal = today.getFullYear();
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const div = document.createElement("div");
+          div.className = "date-picker-day";
+          div.textContent = d;
+
+          // Highlight today's date
+          if (
+            d === currentDay &&
+            month === currentMonthIdx &&
+            year === currentYearVal
+          ) {
+            div.classList.add("today");
+          }
+
+          // Check if this date is in database
+          const dateStr = `${String(d).padStart(2, "0")}-${String(month + 1).padStart(2, "0")}-${year}`;
+          if (synopDatabase[dateStr]) {
+            div.style.background = "rgba(34, 197, 94, 0.3)";
+            div.style.color = "#4ade80";
+            div.style.fontWeight = "bold";
+          }
+
+          if (
+            selectedDateObj &&
+            selectedDateObj.date === d &&
+            selectedDateObj.month === month &&
+            selectedDateObj.year === year
+          ) {
+            div.classList.add("selected");
+          }
+
+          div.onclick = () => selectDate(d, month, year);
+          grid.appendChild(div);
+        }
+      }
+
+      function selectDate(day, month, year) {
+        selectedDateObj = { date: day, month: month, year: year };
+        const dateStr = `${String(day).padStart(2, "0")}-${String(month + 1).padStart(2, "0")}-${year}`;
+        document.getElementById("selectDate").value = dateStr;
+        renderCalendar();
+        toggleDatePicker();
+      }
+
+      function toggleDatePicker() {
+        const popup = document.getElementById("datePickerPopup");
+        popup.classList.toggle("active");
+        if (popup.classList.contains("active")) {
+          renderCalendar();
+        }
+      }
+
+      function changeYear(delta) {
+        const yearSelect = document.getElementById("yearSelect");
+        yearSelect.value = parseInt(yearSelect.value) + delta;
+        renderCalendar();
+      }
+
+      // Close date picker when clicking outside
+      document.addEventListener("click", (e) => {
+        const picker = document.getElementById("datePickerPopup");
+        const input = document.getElementById("selectDate");
+        if (!picker.contains(e.target) && e.target !== input) {
+          picker.classList.remove("active");
+        }
+      });
+
+      // Modal Functions
+      function showDetailModal(date, gmt, stationId) {
+        const data = synopDatabase[date][gmt];
+        const station = data.stations.find((s) => s.id === stationId);
+        if (!station) return;
+
+        document.getElementById("modalTitle").innerHTML = `
+           <span class="date-badge">${date}</span>
+           <span class="gmt-badge ml-2">${gmt}:00</span>
+           <span class="text-white ml-2">${station.name} (${station.id})</span>
+         `;
+
+        showModalView("table");
+        document.getElementById("detailModal").classList.add("active");
+      }
+
+      function closeModal() {
+        document.getElementById("detailModal").classList.remove("active");
+      }
+
+      function showModalView(view) {
+        const buttons = document.querySelectorAll(".view-toggle button");
+        buttons.forEach((b) => b.classList.remove("active"));
+        event.target.classList.add("active");
+
+        const date = document
+          .getElementById("modalTitle")
+          .querySelector(".date-badge").textContent;
+        const gmt = document
+          .getElementById("modalTitle")
+          .querySelector(".gmt-badge")
+          .textContent.replace(":00", "");
+        const stationId = document
+          .getElementById("modalTitle")
+          .textContent.match(/\((\d{5})\)/)[1];
+
+        const data = synopDatabase[date][gmt];
+        const station = data.stations.find((s) => s.id === stationId);
+
+        const modalBody = document.getElementById("modalBody");
+
+        if (view === "table") {
+          modalBody.innerHTML = createStationTable(station, date, gmt);
+        } else {
+          modalBody.innerHTML = createStationDetailed(station, date, gmt);
+        }
+      }
+
+      function createStationTable(station, date, gmt) {
+        return `
+           <table class="summary-table">
+             <tr><th>Parameter</th><th>Value</th><th>Code</th></tr>
+             <tr><td>Station ID</td><td>${station.id}</td><td>-</td></tr>
+             <tr><td>Station Name</td><td>${station.name}</td><td>-</td></tr>
+             <tr><td>Date</td><td>${date}</td><td>-</td></tr>
+             <tr><td>GMT</td><td>${gmt}:00</td><td>-</td></tr>
+             <tr><td>Temperature</td><td>${station.temp || "-"} °C</td><td>1snTTT</td></tr>
+             <tr><td>Max Temperature</td><td>${station.maxTemp || "-"} °C</td><td>333 1snTxTxTx</td></tr>
+             <tr><td>Min Temperature</td><td>${station.minTemp || "-"} °C</td><td>333 2snTnTnTn</td></tr>
+             <tr><td>Dew Point</td><td>${station.dewPoint || "-"} °C</td><td>2snTdTdTd</td></tr>
+             <tr><td>Wet Bulb</td><td>${station.extras.wb || "-"} °C</td><td>Comment</td></tr>
+             <tr><td>Relative Humidity</td><td>${station.extras.rh || "-"} %</td><td>Comment</td></tr>
+             <tr><td>Pressure</td><td>${station.pressure || "-"}</td><td>${station.pressureCode || "4PPPP"}</td></tr>
+             <tr><td>Pressure Change</td><td>${station.pressChange || "-"}</td><td>58/59P24P24P24</td></tr>
+             <tr><td>Wind Direction</td><td>${station.windDir || "-"}</td><td>dd</td></tr>
+             <tr><td>Wind Speed</td><td>${station.windSpeed || "-"}</td><td>ff</td></tr>
+             <tr><td>Visibility</td><td>${station.finalVisibility || "-"}</td><td>VV</td></tr>
+             <tr><td>Cloud Cover (N)</td><td>${station.cloudCover || "-"}</td><td>N</td></tr>
+             <tr><td>Low Cloud (CL)</td><td>${cloudNames.CL[station.CL] || station.CL || "-"} (${station.CL || "-"})</td><td>CL</td></tr>
+             <tr><td>Medium Cloud (CM)</td><td>${cloudNames.CM[station.CM] || station.CM || "-"} (${station.CM || "-"})</td><td>CM</td></tr>
+             <tr><td>High Cloud (CH)</td><td>${cloudNames.CH[station.CH] || station.CH || "-"} (${station.CH || "-"})</td><td>CH</td></tr>
+             <tr><td>Present Weather</td><td>${station.weather || "-"}</td><td>ww</td></tr>
+             <tr><td>Past Weather W1</td><td>${codeTables.presentWeather[station.W1] || station.W1 || "-"}</td><td>W1</td></tr>
+             <tr><td>Past Weather W2</td><td>${codeTables.presentWeather[station.W2] || station.W2 || "-"}</td><td>W2</td></tr>
+           </table>
+         `;
+      }
+
+      function createStationDetailed(station, date, gmt) {
+        const clName = cloudNames.CL[station.CL] || "Unknown";
+        const cmName = cloudNames.CM[station.CM] || "Unknown";
+        const chName = cloudNames.CH[station.CH] || "Unknown";
+
+        return `
+           <div class="space-y-4">
+             <div class="glass-compare-box rounded-lg p-4 !border-blue-500/30">
+               <h3 class="text-lg font-bold text-blue-400 mb-2">Basic Information</h3>
+               <p><span class="text-slate-400">Station:</span> <span class="text-white font-semibold">${station.name}</span> (${station.id})</p>
+               <p><span class="text-slate-400">Date/Time:</span> <span class="date-badge">${date}</span> <span class="gmt-badge">${gmt}:00 GMT</span></p>
+             </div>
+
+             <div class="glass-compare-box rounded-lg p-4 !border-orange-500/30">
+               <h3 class="text-lg font-bold text-orange-400 mb-2">Temperature & Humidity</h3>
+               <div class="grid grid-cols-2 gap-4">
+                 <div><span class="text-slate-400">Temperature:</span> <span class="text-2xl font-bold text-orange-300">${station.temp || "-"}°C</span></div>
+                 <div><span class="text-slate-400">Max Temp:</span> <span class="text-xl font-bold text-orange-300">${station.maxTemp || "-"}°C</span></div>
+                 <div><span class="text-slate-400">Min Temp:</span> <span class="text-xl font-bold text-blue-300">${station.minTemp || "-"}°C</span></div>
+                 <div><span class="text-slate-400">Dew Point:</span> <span class="text-cyan-300">${station.dewPoint || "-"}°C</span></div>
+                 <div><span class="text-slate-400">Wet Bulb:</span> <span class="text-orange-300">${station.extras.wb || "-"}°C</span></div>
+                 <div><span class="text-slate-400">Relative Humidity:</span> <span class="text-green-400 font-bold">${station.extras.rh || "-"}%</span></div>
+               </div>
+             </div>
+
+             <div class="glass-compare-box rounded-lg p-4 !border-purple-500/30">
+               <h3 class="text-lg font-bold text-purple-400 mb-2">Pressure</h3>
+               <p class="text-2xl font-bold text-purple-300">${station.pressure || "-"}</p>
+               <p class="text-sm text-slate-400">Code: ${station.pressureCode || "-"}</p>
+               ${station.pressChange ? `<p class="text-sm text-slate-400">24h Change: ${station.pressChange} hPa</p>` : ""}
+             </div>
+
+             <div class="glass-compare-box rounded-lg p-4 !border-cyan-500/30">
+               <h3 class="text-lg font-bold text-cyan-400 mb-2">Wind</h3>
+               <p><span class="text-slate-400">Direction:</span> <span class="text-white font-semibold">${station.windDir || "-"}</span></p>
+               <p><span class="text-slate-400">Speed:</span> <span class="text-white font-semibold">${station.windSpeed || "-"}</span></p>
+             </div>
+
+             <div class="glass-compare-box rounded-lg p-4 !border-pink-500/30">
+               <h3 class="text-lg font-bold text-pink-400 mb-2">Clouds</h3>
+               <div class="space-y-2">
+                 <div class="flex justify-between"><span class="cloud-cl font-semibold">Low Cloud (CL):</span> <span>${clName} (${station.CL || "-"})</span></div>
+                 <div class="flex justify-between"><span class="cloud-cm font-semibold">Medium Cloud (CM):</span> <span>${cmName} (${station.CM || "-"})</span></div>
+                 <div class="flex justify-between"><span class="cloud-ch font-semibold">High Cloud (CH):</span> <span>${chName} (${station.CH || "-"})</span></div>
+                 <div class="flex justify-between"><span class="text-slate-400">Total Cloud Cover:</span> <span>${station.cloudCover || "-"}</span></div>
+               </div>
+             </div>
+
+             <div class="glass-compare-box rounded-lg p-4 !border-yellow-500/30">
+               <h3 class="text-lg font-bold text-yellow-400 mb-2">Weather & Visibility</h3>
+               <p><span class="text-slate-400">Present Weather:</span> <span class="text-white">${station.weather || "-"}</span></p>
+               <p><span class="text-slate-400">Past Weather W1:</span> <span class="text-slate-300">${codeTables.presentWeather[station.W1] || station.W1 || "-"}</span></p>
+               <p><span class="text-slate-400">Past Weather W2:</span> <span class="text-slate-300">${codeTables.presentWeather[station.W2] || station.W2 || "-"}</span></p>
+               <p><span class="text-slate-400">Visibility:</span> <span class="text-purple-300 font-semibold">${station.finalVisibility || "-"}</span></p>
+             </div>
+
+             <div class="glass-compare-box rounded-lg p-4">
+               <h3 class="text-sm font-bold text-slate-400 mb-2">Raw SYNOP Code</h3>
+               <code class="text-xs text-slate-500 break-all">${station.raw}</code>
+             </div>
+           </div>
+         `;
+      }
+
+      // Excel Export Functions
+      function exportToExcel() {
+        if (currentExcelData.length === 0) {
+          showToast("No data to export. Please load data first.", "error");
+          return;
+        }
+
+        const ws_data = [
+          [
+            "Date",
+            "GMT",
+            "Station ID",
+            "Station Name",
+            "Temperature (°C)",
+            "Max Temp (°C)",
+            "Min Temp (°C)",
+            "Dew Point (°C)",
+            "Wet Bulb (°C)",
+            "RH (%)",
+            "Pressure (hPa)",
+            "Pressure Code",
+            "Pressure Change",
+            "Wind Direction",
+            "Wind Speed",
+            "Visibility",
+            "Cloud Cover (N)",
+            "Low Cloud (CL)",
+            "Low Cloud Name",
+            "Medium Cloud (CM)",
+            "Medium Cloud Name",
+            "High Cloud (CH)",
+            "High Cloud Name",
+            "Present Weather",
+            "Past Weather W1",
+            "Past Weather W2",
+            "Raw SYNOP",
+          ],
+        ];
+
+        currentExcelData.forEach((row) => {
+          ws_data.push([
+            row.date,
+            row.gmt,
+            row.stationId,
+            row.stationName,
+            row.temp,
+            row.maxTemp,
+            row.minTemp,
+            row.dewPoint,
+            row.wb,
+            row.rh,
+            row.pressure,
+            row.pressureCode,
+            row.pressChange,
+            row.windDir,
+            row.windSpeed,
+            row.visibility,
+            row.cloudCover,
+            row.CL,
+            cloudNames.CL[row.CL] || "",
+            row.CM,
+            cloudNames.CM[row.CM] || "",
+            row.CH,
+            cloudNames.CH[row.CH] || "",
+            row.weather,
+            row.W1,
+            row.W2,
+            row.raw,
+          ]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+        // Set column widths
+        ws["!cols"] = [
+          { w: 12 },
+          { w: 8 },
+          { w: 12 },
+          { w: 15 },
+          { w: 10 },
+          { w: 10 },
+          { w: 10 },
+          { w: 10 },
+          { w: 8 },
+          { w: 12 },
+          { w: 12 },
+          { w: 12 },
+          { w: 12 },
+          { w: 10 },
+          { w: 12 },
+          { w: 10 },
+          { w: 8 },
+          { w: 25 },
+          { w: 8 },
+          { w: 25 },
+          { w: 8 },
+          { w: 25 },
+          { w: 15 },
+          { w: 15 },
+          { w: 15 },
+          { w: 50 },
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, "SYNOP Data");
+
+        const dateStr = new Date().toISOString().split("T")[0];
+        XLSX.writeFile(wb, `SYNOP_Data_${dateStr}.xlsx`);
+      }
+
+      function export0312ToExcel() {
+        const allDates = Object.keys(synopDatabase).sort();
+        const ws_data = [
+          [
+            "Date",
+            "GMT",
+            "Station ID",
+            "Station Name",
+            "Temperature (°C)",
+            "Max Temp (°C)",
+            "Min Temp (°C)",
+            "Wet Bulb (°C)",
+            "RH (%)",
+            "Pressure (hPa)",
+            "Visibility (m)",
+            "Wind Direction",
+            "Wind Speed",
+            "Weather",
+            "Low Cloud",
+            "Medium Cloud",
+            "High Cloud",
+          ],
+        ];
+
+        allDates.forEach((date) => {
+          ["03", "12"].forEach((gmt) => {
+            if (synopDatabase[date][gmt]) {
+              synopDatabase[date][gmt].stations.forEach((s) => {
+                ws_data.push([
+                  date,
+                  gmt + ":00",
+                  s.id,
+                  s.name,
+                  s.temp,
+                  s.maxTemp,
+                  s.minTemp,
+                  s.extras.wb,
+                  s.extras.rh,
+                  s.pressure,
+                  s.finalVisibility,
+                  s.windDir,
+                  s.windSpeed,
+                  s.weather,
+                  cloudNames.CL[s.CL] || s.CL,
+                  cloudNames.CM[s.CM] || s.CM,
+                  cloudNames.CH[s.CH] || s.CH,
+                ]);
+              });
+            }
+          });
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        XLSX.utils.book_append_sheet(wb, ws, "03-12 GMT Data");
+        XLSX.writeFile(
+          wb,
+          `SYNOP_03-12_GMT_Summary_${new Date().toISOString().split("T")[0]}.xlsx`,
+        );
+      }
+
+      // Parse Functions
+      function parseCommentData(comment) {
+        const result = {
+          rh: null,
+          wb: null,
+          visibility: null,
+          minVisibility: null,
+        };
+        if (!comment) return result;
+
+        let c = comment.replace(/°C?/gi, "").trim();
+
+        let wbm = c.match(/W\/?\.?B\.?[\s\-:=]+(\d+(?:\.\d+)?)/i);
+        if (wbm) result.wb = parseFloat(wbm[1]);
+
+        let rhm = c.match(/R\/?\.?H\.?[\s\-:=]+(\d+(?:\.\d+)?)/i);
+        if (rhm) result.rh = Math.round(parseFloat(rhm[1]));
+
+        let vism = c.match(/VIS(?:IBILITY|\.)?[\s\-:=]+(\d{3,5})/i);
+        if (vism) result.visibility = parseInt(vism[1], 10);
+
+        let minvism = c.match(/MIN\s*VIS(?:IBILITY|\.)?[\s\-:=]+(\d{3,5})/i);
+        if (minvism) result.minVisibility = parseInt(minvism[1], 10);
+
+        let slashMatch = c.match(
+          /(\d+(?:\.\d+)?)\s*[\/;,]\s*(?:rh[\s\-:=]*)?(\d+(?:\.\d+)?)%?(?:\s*[\/;,]\s*(\d{3,5}))?/i,
+        );
+        if (slashMatch) {
+          let val1 = parseFloat(slashMatch[1]);
+          let val2 = parseFloat(slashMatch[2]);
+          let isVal1WB = slashMatch[1].includes(".") || val1 < 40;
+
+          if (isVal1WB) {
+            if (result.wb === null) result.wb = val1;
+            if (result.rh === null) result.rh = Math.round(val2);
+          } else {
+            if (result.rh === null) result.rh = Math.round(val1);
+            if (result.wb === null) result.wb = val2;
+          }
+          if (result.visibility === null && slashMatch[3])
+            result.visibility = parseInt(slashMatch[3], 10);
+        }
+
+        if (result.rh === null) {
+          let pureRh = c.match(/\b(\d{2,3})\s*%\b/);
+          if (pureRh) result.rh = parseInt(pureRh[1], 10);
+        }
+        if (result.visibility === null) {
+          let pureVis = c.match(/\b(\d{3,5})\s*m\b/i);
+          if (pureVis) result.visibility = parseInt(pureVis[1], 10);
+        }
+
+        return result;
+      }
+
+      function decodePressure(pressCode) {
+        if (!pressCode || pressCode.length !== 5) return null;
+        const digits = pressCode.substring(1);
+        const firstDigit = digits[0];
+        const value = parseInt(digits);
+        if (firstDigit === "0" || firstDigit === "1")
+          return (1000 + value / 10).toFixed(1);
+        else return (value / 10).toFixed(1);
+      }
+
+      async function decodeAndStoreSynop() {
+        const inputRaw = document.getElementById("synopInput").value.trim();
+        if (!inputRaw) {
+          showToast("कृपया SYNOP डेटा डालें!", "error");
+          return;
+        }
+
+        const progressBar = document.getElementById("progressBar");
+        const progressFill = document.getElementById("progressFill");
+        const statusDiv = document.getElementById("processingStatus");
+
+        progressBar.classList.remove("hidden");
+        statusDiv.classList.remove("hidden");
+
+        const lines = preprocessSynopInput(inputRaw);
+        const totalLines = lines.length;
+        statusDiv.textContent = `Processing ${totalLines} lines...`;
+
+        let processedLines = 0;
+        let allBatches = [];
+        let currentBatch = {
+          header: null,
+          stations: [],
+          month: currentMonth,
+          year: currentYear,
+        };
+
+        currentMonth = String(new Date().getMonth() + 1).padStart(2, "0");
+        currentYear = new Date().getFullYear();
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          processedLines++;
+          if (processedLines % 100 === 0) {
+            progressFill.style.width = `${(processedLines / totalLines) * 100}%`;
+            statusDiv.textContent = `Processing... ${processedLines}/${totalLines} lines`;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+
+          if (!line) continue;
+
+          // Check for New Year Marker (e.g., "HAPPY NEW YEAR", "NEW YEAR 2026")
+          const newYearMatch = line.match(
+            /(?:HAPPY\s*)?NEW\s*YEAR(?:\s*(\d{4}))?/i,
+          );
+          if (newYearMatch) {
+            if (currentBatch.header && currentBatch.stations.length > 0)
+              allBatches.push({ ...currentBatch });
+            currentMonth = "01"; // Reset to January
+            if (newYearMatch[1]) {
+              currentYear = parseInt(newYearMatch[1]); // Set specific year if provided
+            }
+            currentBatch = {
+              header: null,
+              stations: [],
+              month: currentMonth,
+              year: currentYear,
+            };
+            continue;
+          }
+
+          // Check for Month Header with optional Year (e.g., "NOV", "NOV 2025")
+          const monthMatch = line.match(
+            /^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(?:\s*(\d{4}))?:?/i,
+          );
+          if (monthMatch) {
+            if (currentBatch.header && currentBatch.stations.length > 0)
+              allBatches.push({ ...currentBatch });
+            currentMonth = monthMap[monthMatch[1].toUpperCase()];
+            if (monthMatch[2]) {
+              currentYear = parseInt(monthMatch[2]); // Update year if present
+            }
+            currentBatch = {
+              header: null,
+              stations: [],
+              month: currentMonth,
+              year: currentYear,
+            };
+            continue;
+          }
+
+          if (line.startsWith("SMIN")) {
+            if (currentBatch.header && currentBatch.stations.length > 0) {
+              allBatches.push({ ...currentBatch });
+              currentBatch.stations = [];
+            }
+            currentBatch.header = {
+              bulletin: line.substring(0, 6),
+              region: line.substring(6, 10),
+              dateTime: line.substring(10, 16),
+            };
+            continue;
+          }
+
+          if (line.startsWith("AAXX")) {
+            const parts = line.split(" ");
+            // Fix: Initialize header if SMIN is missing
+            if (!currentBatch.header) {
+              currentBatch.header = {
+                bulletin: "MANUAL",
+                region: "XXXX",
+                dateTime: "000000",
+              };
+            }
+            if (currentBatch.header) {
+              currentBatch.header.reportType = parts[0];
+              currentBatch.header.obsDate = parts[1]
+                ? parts[1].substring(0, 2)
+                : "";
+              currentBatch.header.obsHour = parts[1]
+                ? parts[1].substring(2, 4)
+                : "";
+              currentBatch.header.windIndicator = parts[1]
+                ? parts[1].substring(4, 5)
+                : "";
+            }
+            continue;
+          }
+
+          const stationMatch = line.match(/^(\d{5})(?:\s|=|$)/);
+          if (stationMatch && currentBatch.header) {
+            const station = parseStationLine(line);
+            if (station) {
+              // Logic to infer GMT based on Max/Min temp presence if not set or default
+              // 1xxxx -> Max Temp -> Usually 12 GMT
+              // 2xxxx -> Min Temp -> Usually 03 GMT
+              if (
+                currentBatch.header.obsHour === "" ||
+                currentBatch.header.obsHour === "00"
+              ) {
+                if (station.maxTemp && !station.minTemp) {
+                  currentBatch.header.obsHour = "12";
+                } else if (station.minTemp && !station.maxTemp) {
+                  currentBatch.header.obsHour = "03";
+                }
+              }
+
+              station.month = currentBatch.month;
+              station.year = currentBatch.year;
+              currentBatch.stations.push(station);
+            }
+          }
+        }
+
+        if (currentBatch.header && currentBatch.stations.length > 0)
+          allBatches.push(currentBatch);
+
+        let totalStored = 0;
+        allBatches.forEach((batch) => {
+          const dateKey = `${batch.header.obsDate}-${batch.month}-${batch.year}`;
+          const gmtKey = batch.header.obsHour;
+          if (!synopDatabase[dateKey]) synopDatabase[dateKey] = {};
+          synopDatabase[dateKey][gmtKey] = {
+            header: batch.header,
+            stations: batch.stations,
+            timestamp: new Date().toISOString(),
+          };
+          totalStored += batch.stations.length;
+        });
+
+        localStorage.setItem("synopDatabase", JSON.stringify(synopDatabase));
+
+        if (allBatches.length > 0) {
+          displayBatch(allBatches[0]);
+          if (allBatches.length > 1) displayAllBatchesSummary(allBatches);
+        }
+
+        progressBar.classList.add("hidden");
+        statusDiv.classList.add("hidden");
+        showToast(
+          `Processing complete! Stored ${totalStored} stations.`,
+          "success",
+        );
+      }
+
+      function parseStationLine(line) {
+        try {
+          const equalParts = line.split("=");
+          const mainPart = equalParts[0].trim();
+          const commentPart = equalParts[1]
+            ? equalParts.slice(1).join("=").trim()
+            : "";
+          const groups = mainPart.split(/\s+/);
+
+          const station = {
+            id: groups[0],
+            name: stationNames[groups[0]] || `Station ${groups[0]}`,
+            raw: line,
+            comment: commentPart,
+            extras: parseCommentData(commentPart),
+          };
+          if (
+            groups.length < 2 ||
+            (groups.length === 2 && !/\d/.test(groups[1]))
+          ) {
+            return station;
+          }
+
+          let i = 1;
+
+          if (groups[i] && groups[i].length === 5) {
+            const g = groups[i];
+            station.iR = g[0];
+            station.ix = g[1];
+            station.h = g[2];
+            station.VV = g.substring(3, 5);
+            i++;
+          }
+
+          if (groups[i] && groups[i].length === 5) {
+            const g = groups[i];
+            station.N = g[0];
+            station.dd = g.substring(1, 3);
+            station.ff = g.substring(3, 5);
+            station.cloudCover = codeTables.cloudAmount[station.N] || station.N;
+            station.windDir =
+              codeTables.windDir[station.dd] || `${parseInt(station.dd) * 10}°`;
+            let ff = parseInt(station.ff);
+            station.windSpeed = ff >= 50 ? `${ff + 100}kn` : `${ff}kn`;
+            i++;
+          }
+
+          if (groups[i] && groups[i].startsWith("1")) {
+            const g = groups[i];
+            const sign = g[1] === "0" ? 1 : -1;
+            station.temp = ((sign * parseInt(g.substring(2, 5))) / 10).toFixed(
+              1,
+            );
+            i++;
+          }
+
+          if (groups[i] && groups[i].startsWith("2")) {
+            const g = groups[i];
+            const sign = g[1] === "0" ? 1 : -1;
+            station.dewPoint = (
+              (sign * parseInt(g.substring(2, 5))) /
+              10
+            ).toFixed(1);
+            i++;
+          }
+
+          if (groups[i] && groups[i].startsWith("4")) {
+            station.pressureCode = groups[i];
+            station.pressure = decodePressure(groups[i]) + " hPa";
+            i++;
+          }
+
+          if (groups[i] && groups[i].startsWith("7")) {
+            const g = groups[i];
+            station.ww = g.substring(1, 3);
+            station.W1 = g[3];
+            station.W2 = g[4];
+            station.weather =
+              codeTables.presentWeather[station.ww] || station.ww;
+            i++;
+          }
+
+          if (groups[i] && groups[i].startsWith("8")) {
+            const g = groups[i];
+            station.Nh = g[1];
+            station.CL = g[2];
+            station.CM = g[3];
+            station.CH = g[4];
+            i++;
+          }
+
+          while (i < groups.length && !groups[i].startsWith("333")) i++;
+          // Fix: Allow 333 or 333/ or similar
+          if (groups[i] && groups[i].startsWith("333")) {
+            i++;
+            if (groups[i] && groups[i].startsWith("1")) {
+              const g = groups[i];
+              const sign = g[1] === "0" ? 1 : -1;
+              station.maxTemp = (
+                (sign * parseInt(g.substring(2, 5))) /
+                10
+              ).toFixed(1);
+              i++;
+            }
+            if (groups[i] && groups[i].startsWith("2")) {
+              const g = groups[i];
+              const sign = g[1] === "0" ? 1 : -1;
+              station.minTemp = (
+                (sign * parseInt(g.substring(2, 5))) /
+                10
+              ).toFixed(1);
+              i++;
+            }
+            if (
+              groups[i] &&
+              (groups[i].startsWith("58") || groups[i].startsWith("59"))
+            ) {
+              const g = groups[i];
+              station.pressChange =
+                (g.startsWith("58") ? "↑" : "↓") +
+                (parseInt(g.substring(2, 5)) / 10).toFixed(1);
+            }
+          }
+
+          if (station.extras.visibility)
+            station.finalVisibility = `${station.extras.visibility}m`;
+          else if (station.VV) {
+            const vvCode = station.VV;
+            if (vvCode >= "90") {
+              const visMap = {
+                90: "<50m",
+                91: "50m",
+                92: "200m",
+                93: "500m",
+                94: "1km",
+                95: "2km",
+                96: "4km",
+                97: "10km",
+                98: "20km",
+                99: "≥50km",
+              };
+              station.finalVisibility =
+                visMap[vvCode] || `${parseInt(vvCode)}00m`;
+            } else if (vvCode <= "50")
+              station.finalVisibility = `${(parseInt(vvCode) * 0.1).toFixed(1)}km`;
+            else station.finalVisibility = `${parseInt(vvCode) - 50}km`;
+          }
+
+          return station;
+        } catch (e) {
+          console.error("Error:", e);
+          return null;
+        }
+      }
+
+      function displayBatch(batch) {
+        const dateKey = `${batch.header.obsDate}-${batch.month}-${batch.year}`;
+        const gmtKey = batch.header.obsHour;
+
+        document.getElementById("monthDisplay").textContent =
+          monthNames[parseInt(batch.month) - 1];
+        document.getElementById("obsDateDisplay").textContent = dateKey;
+        document.getElementById("obsTimeDisplay").textContent =
+          `${gmtKey}:00 GMT`;
+        document.getElementById("windUnit").textContent =
+          { 0: "Est (kn)", 1: "Anemo (kn)", 3: "Est (m/s)", 4: "Anemo (m/s)" }[
+            batch.header.windIndicator
+          ] || "Unknown";
+        document.getElementById("totalStations").textContent =
+          batch.stations.length;
+        document.getElementById("dateTimeInfo").classList.remove("hidden");
+
+        document.getElementById("summarySection").classList.remove("hidden");
+
+        setTimeout(() => {
+          updateDashboardCharts(batch);
+        }, 150);
+
+        displayStations(batch.stations);
+        document.getElementById("emptyState").classList.add("hidden");
+      }
+
+      function displayAllBatchesSummary(batches) {
+        const container = document.getElementById("resultsContainer");
+        const summaryDiv = document.createElement("div");
+        summaryDiv.className = "core-glass-panel p-4 mb-6 !border-blue-500/50";
+        summaryDiv.innerHTML = `
+           <h3 class="text-lg font-bold text-white mb-3">All Batches Summary (${batches.length} total)</h3>
+           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+             ${batches
+               .map(
+                 (b) => `
+               <div class="glass-compare-box rounded-lg p-3">
+                 <div class="flex justify-between items-center">
+                   <span class="date-badge text-sm">${b.header.obsDate}-${b.month}-${b.year}</span>
+                   <span class="gmt-badge text-xs">${b.header.obsHour}:00</span>
+                 </div>
+                 <p class="text-slate-400 text-sm mt-2">${b.stations.length} stations</p>
+               </div>
+             `,
+               )
+               .join("")}
+           </div>
+         `;
+        container.insertBefore(summaryDiv, container.firstChild);
+      }
+
+      function displayStations(stations) {
+        const container = document.getElementById("resultsContainer");
+        const summaryDiv = container.querySelector(".glass-panel.border-2");
+        container.innerHTML = "";
+        if (summaryDiv) container.appendChild(summaryDiv);
+
+        stations.forEach((station, index) => {
+          const card = document.createElement("div");
+          card.className = "station-card rounded-xl p-6 animate-fade-in";
+          card.style.animationDelay = `${index * 0.05}s`;
+
+          card.innerHTML = `
+             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 pb-4 border-b border-slate-700">
+               <div>
+                 <h2 class="text-2xl font-bold text-white flex items-center gap-3">${station.name}<span class="code-badge text-sm">${station.id}</span></h2>
+               </div>
+               <div class="mt-2 md:mt-0 flex gap-2">
+                 ${station.extras.rh ? `<span class="rh-highlight text-sm">RH: ${station.extras.rh}%</span>` : ""}
+                 ${station.extras.wb ? `<span class="wb-highlight text-sm">WB: ${station.extras.wb}°C</span>` : ""}
+               </div>
+             </div>
+             <div class="param-grid">
+               <div class="param-item"><div class="param-label">Temperature</div><div class="param-value text-orange-400">${station.temp ? station.temp + "°C" : "N/A"}</div>${station.maxTemp ? `<div class="text-xs text-slate-400 mt-1">Max: ${station.maxTemp}°C</div>` : ""}${station.minTemp ? `<div class="text-xs text-slate-400 mt-1">Min: ${station.minTemp}°C</div>` : ""}</div>
+               <div class="param-item"><div class="param-label">Wet Bulb</div><div class="param-value ${station.extras.wb ? "text-orange-300" : "text-slate-500"}">${station.extras.wb ? station.extras.wb + "°C" : "N/A"}</div></div>
+               <div class="param-item"><div class="param-label">Relative Humidity</div><div class="param-value ${station.extras.rh ? "text-green-400" : "text-slate-500"}">${station.extras.rh ? station.extras.rh + "%" : "N/A"}</div></div>
+               <div class="param-item"><div class="param-label">Pressure</div><div class="param-value text-purple-400">${station.pressure || "N/A"}</div><div class="text-xs text-slate-400">${station.pressureCode || ""}</div></div>
+               <div class="param-item"><div class="param-label">Wind</div><div class="param-value">${station.windDir || "N/A"} @ ${station.windSpeed || "N/A"}</div></div>
+               <div class="param-item"><div class="param-label">Visibility</div><div class="param-value text-purple-300">${station.finalVisibility || "N/A"}</div></div>
+               <div class="param-item"><div class="param-label">Cloud Cover</div><div class="param-value">${station.cloudCover || "N/A"}</div></div>
+               <div class="param-item"><div class="param-label">Cloud Types</div><div class="text-sm mt-1"><span class="cloud-cl">CL: ${cloudNames.CL[station.CL] || station.CL || "-"}</span><br><span class="cloud-cm">CM: ${cloudNames.CM[station.CM] || station.CM || "-"}</span><br><span class="cloud-ch">CH: ${cloudNames.CH[station.CH] || station.CH || "-"}</span></div></div>
+               <div class="param-item"><div class="param-label">Weather</div><div class="param-value text-sm">${station.weather || "N/A"}</div></div>
+             </div>
+             <div class="mt-4 pt-4 border-t border-slate-700">
+               <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-xs text-slate-500 hover:text-slate-300">Toggle Raw Data</button>
+               <div class="hidden mt-2 p-3 glass-compare-box rounded-lg font-mono text-xs text-slate-300 overflow-x-auto">${station.raw}</div>
+             </div>
+           `;
+          container.appendChild(card);
+        });
+      }
+
+      // Database Functions
+      function showDatabaseView() {
+        document.getElementById("databaseView").classList.remove("hidden");
+        document.getElementById("currentResults").classList.add("hidden");
+        document.getElementById("emptyState").classList.add("hidden");
+        updateAvailableDatesList();
+      }
+
+      function updateAvailableDatesList() {
+        const container = document.getElementById("availableDatesList");
+        const dates = Object.keys(synopDatabase).sort();
+        if (dates.length === 0) {
+          container.innerHTML =
+            '<span class="text-slate-500">No data available</span>';
+          return;
+        }
+        container.innerHTML = dates
+          .map(
+            (date) => `
+           <button onclick="selectDateFromButton('${date}')" class="date-badge hover:bg-green-500/30 cursor-pointer transition-all text-sm">${date}</button>
+         `,
+          )
+          .join("");
+      }
+
+      function selectDateFromButton(date) {
+        document.getElementById("selectDate").value = date;
+        loadDateData();
+      }
+
+      function loadDateData() {
+        const selectedDate = document.getElementById("selectDate").value.trim();
+        const selectedGMT = document.getElementById("selectGMT").value;
+        const display = document.getElementById("storedDataDisplay");
+
+        currentExcelData = []; // Reset Excel data
+
+        if (!selectedDate) {
+          updateAvailableDatesList();
+          return;
+        }
+
+        if (!synopDatabase[selectedDate]) {
+          display.innerHTML = `<p class="text-red-400 text-center py-8">No data found for ${selectedDate}</p>`;
+          return;
+        }
+
+        let html = "";
+        const gmts =
+          selectedGMT === "all"
+            ? Object.keys(synopDatabase[selectedDate]).sort()
+            : [selectedGMT];
+
+        gmts.forEach((gmt) => {
+          if (!synopDatabase[selectedDate][gmt]) return;
+
+          const data = synopDatabase[selectedDate][gmt];
+
+          // Prepare Excel data
+          data.stations.forEach((s) => {
+            currentExcelData.push({
+              date: selectedDate,
+              gmt: gmt + ":00",
+              stationId: s.id,
+              stationName: s.name,
+              temp: s.temp,
+              maxTemp: s.maxTemp,
+              dewPoint: s.dewPoint,
+              wb: s.extras.wb,
+              rh: s.extras.rh,
+              pressure: s.pressure,
+              pressureCode: s.pressureCode,
+              pressChange: s.pressChange,
+              windDir: s.windDir,
+              windSpeed: s.windSpeed,
+              visibility: s.finalVisibility,
+              cloudCover: s.cloudCover,
+              CL: s.CL,
+              CM: s.CM,
+              CH: s.CH,
+              weather: s.weather,
+              W1: s.W1,
+              W2: s.W2,
+              raw: s.raw,
+            });
+          });
+
+          html += `
+             <div class="core-glass-panel p-4 mb-4 !border-blue-500/30">
+               <div class="flex justify-between items-center mb-4">
+                 <h3 class="text-lg font-bold text-white"><span class="date-badge mr-2">${selectedDate}</span><span class="gmt-badge">${gmt}:00 GMT</span></h3>
+                 <span class="text-slate-400 text-sm">${data.stations.length} stations</span>
+               </div>
+               <div class="overflow-x-auto">
+                 <table class="summary-table">
+                   <thead>
+                     <tr>
+                       <th>Station</th>
+                       <th>Temp</th>
+                       <th>Max</th>
+                   <th>Min</th>
+                       <th>WB</th>
+                       <th>RH</th>
+                       <th>Pressure</th>
+                       <th>Visibility</th>
+                       <th>Wind</th>
+                       <th>Clouds (CL/CM/CH)</th>
+                       <th>Action</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     ${data.stations
+                       .map(
+                         (s) => `
+                       <tr>
+                         <td class="font-semibold text-white">${s.name}</td>
+                         <td>${s.temp || "-"}°C</td>
+                         <td>${s.maxTemp || "-"}°C</td>
+                         <td>${s.minTemp || "-"}°C</td>
+                         <td>${s.extras.wb || "-"}°C</td>
+                         <td>${s.extras.rh ? s.extras.rh + "%" : "-"}</td>
+                         <td>${s.pressure || "-"}</td>
+                         <td>${s.finalVisibility || "-"}</td>
+                         <td>${s.windDir || "-"} ${s.windSpeed || "-"}</td>
+                         <td><span class="cloud-cl">${s.CL || "-"}</span>/<span class="cloud-cm">${s.CM || "-"}</span>/<span class="cloud-ch">${s.CH || "-"}</span></td>
+                         <td><button onclick="showDetailModal('${selectedDate}', '${gmt}', '${s.id}')" class="text-blue-400 hover:text-blue-300"><i class="fas fa-eye"></i></button></td>
+                       </tr>
+                     `,
+                       )
+                       .join("")}
+                   </tbody>
+                 </table>
+               </div>
+             </div>
+           `;
+        });
+
+        display.innerHTML =
+          html ||
+          '<p class="text-slate-400 text-center">No data for selected GMT</p>';
+      }
+
+      function compareDates() {
+        const fromDate = document.getElementById("fromDate").value.trim();
+        const toDate = document.getElementById("toDate").value.trim();
+        if (!fromDate || !toDate) {
+          showToast("Please enter both dates in DD-MM-YYYY format!", "error");
+          return;
+        }
+
+        const display = document.getElementById("storedDataDisplay");
+        const allDates = Object.keys(synopDatabase).sort();
+
+        const filteredDates = allDates.filter((d) => {
+          const [d1, m1, y1] = d.split("-").map(Number);
+          const [d2, m2, y2] = fromDate.split("-").map(Number);
+          const [d3, m3, y3] = toDate.split("-").map(Number);
+          const dateObj = new Date(y1, m1 - 1, d1);
+          const fromObj = new Date(y2, m2 - 1, d2);
+          const toObj = new Date(y3, m3 - 1, d3);
+          return dateObj >= fromObj && dateObj <= toObj;
+        });
+
+        if (filteredDates.length === 0) {
+          display.innerHTML =
+            '<p class="text-red-400 text-center">No data found in this date range</p>';
+          return;
+        }
+
+        let html = `<h3 class="text-xl font-bold text-white mb-4">Comparison: ${fromDate} to ${toDate}</h3><p class="text-green-400 mb-4">Found ${filteredDates.length} dates</p>`;
+
+        filteredDates.forEach((date) => {
+          const gmts = Object.keys(synopDatabase[date]);
+          const totalStations = gmts.reduce(
+            (sum, g) => sum + synopDatabase[date][g].stations.length,
+            0,
+          );
+          html += `
+             <div class="core-glass-panel p-4 mb-4">
+               <h4 class="date-badge inline-block mb-2">${date}</h4>
+               <p class="text-slate-300 text-sm">Total records: ${totalStations} across ${gmts.length} GMTs</p>
+               <div class="flex gap-2 mt-2 flex-wrap">
+                 ${gmts
+                   .map((g) => {
+                     const s = synopDatabase[date][g].stations;
+                     const avgTemp =
+                       s
+                         .filter((x) => x.temp)
+                         .reduce((a, b) => a + parseFloat(b.temp), 0) /
+                         s.filter((x) => x.temp).length || 0;
+                     return `<div class="glass-compare-box rounded-lg p-2 text-center min-w-[80px]"><span class="gmt-badge text-xs">${g}:00</span><p class="text-slate-300 text-xs mt-1">${s.length} stns</p>${avgTemp ? `<p class="text-xs text-orange-400">Avg: ${avgTemp.toFixed(1)}°C</p>` : ""}</div>`;
+                   })
+                   .join("")}
+               </div>
+             </div>
+           `;
+        });
+        display.innerHTML = html;
+      }
+
+      function show0312Table() {
+        const tbody = document.getElementById("tbody0312");
+        tbody.innerHTML = "";
+        const allDates = Object.keys(synopDatabase).sort();
+        let count = 0;
+
+        allDates.forEach((date) => {
+          ["03", "12"].forEach((gmt) => {
+            if (synopDatabase[date][gmt]) {
+              const data = synopDatabase[date][gmt];
+              data.stations.forEach((s) => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                   <td class="text-slate-400">${date}</td>
+                   <td><span class="gmt-badge">${gmt}:00</span></td>
+                   <td class="font-semibold text-white">${s.name}</td>
+                   <td>${s.temp || "-"}°C</td>
+                   <td>${s.maxTemp || "-"}°C</td>
+                   <td>${s.minTemp || "-"}°C</td>
+                   <td>${s.extras.wb || "-"}°C</td>
+                   <td>${s.extras.rh ? s.extras.rh + "%" : "-"}</td>
+                   <td class="text-purple-400 font-semibold">${s.pressure || "-"}</td>
+                   <td>${s.finalVisibility || "-"}</td>
+                   <td>${s.windDir || "-"} ${s.windSpeed || "-"}</td>
+                   <td>${s.weather || "-"}</td>
+                   <td><span class="cloud-cl">${cloudNames.CL[s.CL] || s.CL || "-"}</span> / <span class="cloud-cm">${cloudNames.CM[s.CM] || s.CM || "-"}</span> / <span class="cloud-ch">${cloudNames.CH[s.CH] || s.CH || "-"}</span></td>
+                 `;
+                tbody.appendChild(row);
+                count++;
+              });
+            }
+          });
+        });
+
+        if (count === 0)
+          tbody.innerHTML =
+            '<tr><td colspan="12" class="text-center text-slate-400 py-8">No 03 or 12 GMT data found</td></tr>';
+        document.getElementById("special0312Table").classList.remove("hidden");
+        document
+          .getElementById("special0312Table")
+          .scrollIntoView({ behavior: "smooth" });
+      }
+
+      function exportDatabase() {
+        const dataStr = JSON.stringify(synopDatabase, null, 2);
+        const dataBlob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `synop_database_${new Date().toISOString().split("T")[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      let paramChartInstances = [];
+
+      function updateDashboardCharts(batch) {
+        const stations = batch.stations;
+        const gmt = batch.header.obsHour;
+
+        paramChartInstances.forEach((c) => c.destroy());
+        paramChartInstances = [];
+
+        if (!stations || stations.length === 0) return;
+
+        const isLight = document.body.classList.contains("light-theme");
+        const textColor = isLight ? "#334e68" : "#cbd5e1";
+        const gridColor = isLight
+          ? "rgba(0,0,0,0.05)"
+          : "rgba(255,255,255,0.05)";
+
+        const labels = stations.map((s) => s.name);
+        const temps = stations.map((s) => parseFloat(s.temp) || 0);
+        const wbs = stations.map((s) => parseFloat(s.extras.wb) || 0);
+        const rhs = stations.map((s) => parseFloat(s.extras.rh) || 0);
+        const pressures = stations.map((s) => parseFloat(s.pressure) || 0);
+
+        const maxTemps = stations.map((s) => parseFloat(s.maxTemp) || 0);
+        const minTemps = stations.map((s) => parseFloat(s.minTemp) || 0);
+
+        const container = document.getElementById("parameterChartsContainer");
+        container.innerHTML = "";
+
+        try {
+          const createParamChart = (paramId, title, data, colorStr) => {
+            const wrapper = document.createElement("div");
+            wrapper.className =
+              "relative w-full h-80 bg-slate-900/30 rounded-2xl p-4 border border-slate-700/50 shadow-inner";
+            wrapper.innerHTML = `<canvas id="${paramId}"></canvas>`;
+            container.appendChild(wrapper);
+
+            const ctx = document.getElementById(paramId);
+            const chart = new Chart(ctx, {
+              type: "line",
+              data: {
+                labels: labels,
+                datasets: [
+                  {
+                    label: title,
+                    data: data,
+                    borderColor: colorStr,
+                    backgroundColor: colorStr
+                      .replace("0.9)", "0.1)")
+                      .replace("1)", "0.1)"),
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: colorStr,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  title: {
+                    display: true,
+                    text: title,
+                    color: textColor,
+                    font: { family: "'Inter', sans-serif", size: 15 },
+                  },
+                },
+                scales: {
+                  x: {
+                    ticks: { color: textColor, font: { size: 10 } },
+                    grid: { color: gridColor },
+                  },
+                  y: {
+                    ticks: { color: textColor },
+                    grid: { color: gridColor },
+                  },
+                },
+              },
+            });
+            paramChartInstances.push(chart);
+          };
+
+          createParamChart(
+            "chartTemp",
+            "Temperature (°C)",
+            temps,
+            "rgba(239, 68, 68, 0.9)",
+          );
+          createParamChart(
+            "chartWB",
+            "Wet Bulb (°C)",
+            wbs,
+            "rgba(249, 115, 22, 0.9)",
+          );
+          createParamChart(
+            "chartRH",
+            "Relative Humidity (%)",
+            rhs,
+            "rgba(59, 130, 246, 0.9)",
+          );
+          createParamChart(
+            "chartPressure",
+            "Pressure (hPa)",
+            pressures,
+            "rgba(168, 85, 247, 0.9)",
+          );
+
+          if (gmt === "12")
+            createParamChart(
+              "chartMaxTemp",
+              "Max Temperature (°C)",
+              maxTemps,
+              "rgba(185, 28, 28, 1)",
+            );
+          if (gmt === "03")
+            createParamChart(
+              "chartMinTemp",
+              "Min Temperature (°C)",
+              minTemps,
+              "rgba(29, 78, 216, 1)",
+            );
+        } catch (error) {
+          console.error("Chart.js rendering error:", error);
+        }
+      }
+
+      function toggleTheme() {
+        const body = document.body;
+        const isLight = body.classList.toggle("light-theme");
+        localStorage.setItem("synop_theme", isLight ? "light" : "dark");
+        updateThemeIcon(isLight);
+
+        // Update Chart colors if it exists
+        if (paramChartInstances.length > 0) {
+          const textColor = isLight ? "#334e68" : "#cbd5e1";
+          const gridColor = isLight
+            ? "rgba(0,0,0,0.05)"
+            : "rgba(255,255,255,0.05)";
+
+          paramChartInstances.forEach((chart) => {
+            if (chart.options.plugins.title)
+              chart.options.plugins.title.color = textColor;
+            if (chart.options.scales) {
+              if (chart.options.scales.x) {
+                chart.options.scales.x.ticks.color = textColor;
+                chart.options.scales.x.grid.color = gridColor;
+              }
+              if (chart.options.scales.y) {
+                chart.options.scales.y.ticks.color = textColor;
+                chart.options.scales.y.grid.color = gridColor;
+              }
+            }
+            chart.update();
+          });
+        }
+      }
+
+      function updateThemeIcon(isLight) {
+        const btn = document.getElementById("themeToggleBtn");
+        if (btn) {
+          if (isLight) {
+            btn.innerHTML = '<i class="fas fa-moon text-lg"></i>';
+            btn.classList.remove("text-amber-400", "hover:text-amber-300");
+            btn.classList.add("text-slate-600", "hover:text-slate-800");
+          } else {
+            btn.innerHTML = '<i class="fas fa-sun text-lg"></i>';
+            btn.classList.remove("text-slate-600", "hover:text-slate-800");
+            btn.classList.add("text-amber-400", "hover:text-amber-300");
+          }
+        }
+      }
+
+      function clearAll() {
+        document.getElementById("synopInput").value = "";
+        paramChartInstances.forEach((c) => c.destroy());
+        paramChartInstances = [];
+
+        document.getElementById("resultsContainer").innerHTML = "";
+        document.getElementById("summarySection").classList.add("hidden");
+        document.getElementById("dateTimeInfo").classList.add("hidden");
+        document.getElementById("emptyState").classList.remove("hidden");
+        document.getElementById("databaseView").classList.add("hidden");
+        document.getElementById("currentResults").classList.remove("hidden");
+        document.getElementById("progressBar").classList.add("hidden");
+        document.getElementById("processingStatus").classList.add("hidden");
+      }
+
+      function showToast(message, type = "success") {
+        const container = document.getElementById("toast-container");
+        const toast = document.createElement("div");
+
+        const bgClass =
+          type === "success"
+            ? "bg-teal-600"
+            : type === "error"
+              ? "bg-red-600"
+              : "bg-slate-700";
+        const icon =
+          type === "success"
+            ? "fa-check-circle"
+            : type === "error"
+              ? "fa-exclamation-circle"
+              : "fa-info-circle";
+
+        toast.className = `flex items-center gap-3 ${bgClass} text-white px-4 py-3 rounded-lg shadow-lg border border-white/10 toast-enter`;
+        toast.innerHTML = `<i class="fas ${icon} text-lg"></i><span class="font-medium text-sm">${message}</span>`;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+          toast.classList.remove("toast-enter");
+          toast.classList.add("toast-exit");
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      async function handleExampleSelection(selectElement) {
+        const val = selectElement.value;
+        if (!val) return;
+
+        if (val === "short") {
+          const example =
+            "SMIN90 VEPT 191200\nAAXX 19124\n42492 31996 40000 10266 20130 40140 70500 84030 333 10292 58022 84360=rh=043/18.6Vis=4500m\n42591 31596 43604 10250 20170 40147 70510 82540 333 10290 58020 82620 83360= WB=20.0 RH=061% VIS=5000M";
+          document.getElementById("synopInput").value = example;
+          showToast("Example data loaded successfully!", "success");
+        } else if (val === "long") {
+          const originalText =
+            selectElement.options[selectElement.selectedIndex].text;
+          selectElement.options[selectElement.selectedIndex].text =
+            "Loading...";
+          selectElement.disabled = true;
+
+          try {
+            const response = await fetch("TestSynop.txt");
+            if (!response.ok) throw new Error("HTTP error " + response.status);
+            const data = await response.text();
+            document.getElementById("synopInput").value = data;
+            showToast("Example data loaded successfully!", "success");
+          } catch (error) {
+            console.error("Error loading TestSynop.txt:", error);
+            alert(
+              "TestSynop.txt फाइल को लोड नहीं किया जा सका!\n\nकृपया सुनिश्चित करें कि 'TestSynop.txt' फाइल index.html वाले फोल्डर में ही मौजूद है और आप इसे VS Code 'Live Server' के माध्यम से चला रहे हैं।",
+            );
+            showToast("Failed to load example data", "error");
+          } finally {
+            selectElement.options[selectElement.selectedIndex].text =
+              originalText;
+            selectElement.disabled = false;
+          }
+        }
+        selectElement.value = "";
+      }
+
+      // Helper function to preprocess input: handle multiline comments & single space
+      function preprocessSynopInput(inputRaw) {
+        let input = inputRaw.replace(/\r\n/g, "\n");
+        input = input.replace(/(\S)(AAXX|BBXX)/gi, "$1\n$2");
+        input = input.replace(/(AAXX|BBXX)\s*(\d{5})(\d{5})/gi, "$1 $2\n$3");
+        input = input.replace(/(\S)(42\d{3}\s+[0-4]\d{4})/g, "$1\n$2");
+
+        const lines = input.split("\n");
+        let combinedLines = [];
+        let currentLine = "";
+
+        for (let i = 0; i < lines.length; i++) {
+          let line = lines[i].trim();
+          if (!line) continue;
+
+          // Normalize spaces to single space
+          line = line.replace(/\s+/g, " ");
+
+          const isHeader =
+            line.match(/^(?:HAPPY\s*)?NEW\s*YEAR/i) ||
+            line.match(/^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i) ||
+            line.match(/^(SMIN|SIIN|AAXX|BBXX)/i);
+          const isStation = line.match(/^(\d{5})(?:\s|=|$)/);
+
+          if (isHeader || isStation) {
+            if (currentLine) combinedLines.push(currentLine);
+            currentLine = line;
+          } else {
+            if (currentLine) {
+              currentLine += " " + line;
+            } else {
+              currentLine = line;
+            }
+          }
+        }
+        if (currentLine) combinedLines.push(currentLine);
+        return combinedLines;
+      }
+
+      function formatForSubmission() {
+        const inputRaw = document.getElementById("synopInput").value.trim();
+        if (!inputRaw) {
+          showToast("कृपया SYNOP डेटा डालें!", "error");
+          return;
+        }
+
+        const combinedLines = preprocessSynopInput(inputRaw);
+        submissionComparisonData = [];
+
+        for (let i = 0; i < combinedLines.length; i++) {
+          let line = combinedLines[i];
+
+          // अगर लाइन हेडर है
+          if (
+            line.match(/^(?:HAPPY\s*)?NEW\s*YEAR/i) ||
+            line.match(/^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i) ||
+            line.match(/^(SMIN|SIIN|AAXX|BBXX)/i)
+          ) {
+            submissionComparisonData.push({
+              type: "header",
+              original: line,
+              formatted: line,
+            });
+          }
+          // अगर लाइन स्टेशन डेटा है
+          else if (line.match(/^(\d{5})(?:\s|=|$)/)) {
+            let eqIndex = line.indexOf("=");
+            let preEqualPart =
+              eqIndex !== -1 ? line.substring(0, eqIndex).trim() : line.trim();
+            let groups = preEqualPart.split(" ");
+            let stationCode = groups[0];
+            let cleanLine = "";
+
+            if (
+              groups.length <= 1 ||
+              (groups.length === 2 && !/\d/.test(groups[1]))
+            ) {
+              cleanLine = `${stationCode} NA=`;
+            } else {
+              cleanLine = preEqualPart + "=";
+            }
+
+            submissionComparisonData.push({
+              type: "station",
+              original: line,
+              formatted: cleanLine,
+            });
+          }
+        }
+
+        updateSubmissionOutput();
+        renderSubmissionComparisonView();
+        switchSubmissionView("raw");
+        document.getElementById("submissionModal").classList.add("active");
+      }
+
+      function updateSubmissionOutput() {
+        const addLineBreaks =
+          document.getElementById("subLineBreakToggle").checked;
+        let formattedLines = [];
+        submissionComparisonData.forEach((item) => {
+          if (item.type === "station" && addLineBreaks) {
+            formattedLines.push("");
+          }
+          formattedLines.push(item.formatted);
+        });
+        document.getElementById("submissionOutput").value = formattedLines
+          .join("\n")
+          .trim();
+      }
+
+      function closeSubmissionModal() {
+        document.getElementById("submissionModal").classList.remove("active");
+      }
+
+      function copySubmissionText() {
+        const output = document.getElementById("submissionOutput");
+        output.select();
+        document.execCommand("copy");
+        showToast("डेटा क्लिपबोर्ड पर कॉपी हो गया है!", "success");
+      }
+
+      let submissionComparisonData = [];
+
+      function renderSubmissionComparisonView() {
+        const container = document.getElementById("subCompareViewContainer");
+        let html = '<div class="grid grid-cols-2 gap-4 text-sm font-mono">';
+        html +=
+          '<div class="font-bold text-slate-400 border-b border-slate-700 pb-2">Original Input</div>';
+        html +=
+          '<div class="font-bold text-slate-400 border-b border-slate-700 pb-2">Submission Output</div>';
+
+        submissionComparisonData.forEach((item) => {
+          if (item.type === "header") {
+            html += `<div class="col-span-2 text-teal-400 mt-4 font-bold border-b border-slate-700 pb-1">${item.original}</div>`;
+          } else {
+            html += `<div class="glass-compare-box p-4 rounded-xl break-words whitespace-pre-wrap text-slate-200 shadow-lg">${item.original}</div>`;
+            html += `<div class="glass-compare-box glass-compare-teal p-4 rounded-xl break-words whitespace-pre-wrap text-teal-100 shadow-lg">${item.formatted}</div>`;
+          }
+        });
+        html += "</div>";
+        container.innerHTML = html;
+      }
+
+      function switchSubmissionView(viewType) {
+        const rawContainer = document.getElementById("subRawViewContainer");
+        const compareContainer = document.getElementById(
+          "subCompareViewContainer",
+        );
+        const btnRaw = document.getElementById("btnSubRawView");
+        const btnCompare = document.getElementById("btnSubCompareView");
+
+        if (viewType === "raw") {
+          rawContainer.classList.remove("hidden");
+          compareContainer.classList.add("hidden");
+          btnRaw.classList.add("active");
+          btnCompare.classList.remove("active");
+        } else {
+          rawContainer.classList.add("hidden");
+          compareContainer.classList.remove("hidden");
+          btnRaw.classList.remove("active");
+          btnCompare.classList.add("active");
+        }
+      }
+
+      function formatSynopData() {
+        try {
+          const inputRaw = document.getElementById("synopInput").value.trim();
+          if (!inputRaw) {
+            showToast("कृपया SYNOP डेटा डालें!", "error");
+            return;
+          }
+
+          const combinedLines = preprocessSynopInput(inputRaw);
+          comparisonData = [];
+
+          for (let i = 0; i < combinedLines.length; i++) {
+            let line = combinedLines[i];
+
+            if (
+              line.match(/^(?:HAPPY\s*)?NEW\s*YEAR/i) ||
+              line.match(
+                /^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i,
+              ) ||
+              line.match(/^(SMIN|SIIN|AAXX|BBXX)/i)
+            ) {
+              comparisonData.push({
+                type: "header",
+                original: line,
+                formatted: line,
+              });
+            } else if (line.match(/^(\d{5})(?:\s|=|$)/)) {
+              let eqIndex = line.indexOf("=");
+              let synopPart = line;
+              let commentPart = "";
+
+              if (eqIndex !== -1) {
+                synopPart = line.substring(0, eqIndex).trim();
+                commentPart = line.substring(eqIndex + 1).trim();
+              }
+
+              let groups = synopPart.split(" ");
+              let stationCode = groups[0];
+
+              // Handle empty/NA data cases gracefully
+              if (
+                groups.length <= 1 ||
+                (groups.length === 2 && !/\d/.test(groups[1]))
+              ) {
+                let namePart =
+                  commentPart ||
+                  (groups.length > 1 ? groups.slice(1).join(" ") : "");
+                let finalStr = `${stationCode} NA=`;
+
+                if (namePart) {
+                  let cleanName = namePart
+                    .replace(/^[\s=]+/, "")
+                    .replace(/^NA[\s=]*/i, "")
+                    .trim();
+                  if (cleanName) finalStr += " " + cleanName;
+                }
+
+                comparisonData.push({
+                  type: "station",
+                  original: line,
+                  formatted: finalStr,
+                });
+                continue;
+              }
+
+              // Ensure proper spacing inside the synop blocks itself
+              synopPart = synopPart.replace(/\s+/g, " ");
+
+              let c = commentPart.replace(/°C?/gi, "").trim();
+              let wbVal = null;
+              let rhVal = null;
+              let visVal = null;
+              let minVisVal = null;
+              let outComment = [];
+
+              let wbm = c.match(/W\/?\.?B\.?[\s\-:=]+(\d+(?:\.\d+)?)/i);
+              if (wbm) wbVal = parseFloat(wbm[1]).toFixed(1);
+
+              let rhm = c.match(/R\/?\.?H\.?[\s\-:=]+(\d+(?:\.\d+)?)/i);
+              if (rhm) rhVal = Math.round(parseFloat(rhm[1])).toString();
+
+              let vism = c.match(/VIS(?:IBILITY|\.)?[\s\-:=]+(\d{3,5})/i);
+              if (vism) visVal = parseInt(vism[1], 10).toString();
+
+              let minvism = c.match(
+                /MIN\s*VIS(?:IBILITY|\.)?[\s\-:=]+(\d{3,5})/i,
+              );
+              if (minvism) minVisVal = parseInt(minvism[1], 10).toString();
+
+              let slashMatch = c.match(
+                /(\d+(?:\.\d+)?)\s*[\/;,]\s*(?:rh[\s\-:=]*)?(\d+(?:\.\d+)?)%?(?:\s*[\/;,]\s*(\d{3,5}))?/i,
+              );
+              if (slashMatch) {
+                let val1 = parseFloat(slashMatch[1]);
+                let val2 = parseFloat(slashMatch[2]);
+                let isVal1WB = slashMatch[1].includes(".") || val1 < 40;
+
+                if (isVal1WB) {
+                  if (!wbVal) wbVal = val1.toFixed(1);
+                  if (!rhVal) rhVal = Math.round(val2).toString();
+                } else {
+                  if (!rhVal) rhVal = Math.round(val1).toString();
+                  if (!wbVal) wbVal = val2.toFixed(1);
+                }
+                if (!visVal && slashMatch[3])
+                  visVal = parseInt(slashMatch[3], 10).toString();
+              }
+
+              if (!rhVal) {
+                let pureRh = c.match(/\b(\d{2,3})\s*%\b/);
+                if (pureRh) rhVal = parseInt(pureRh[1], 10).toString();
+              }
+              if (!visVal) {
+                let pureVis = c.match(/\b(\d{3,5})\s*m\b/i);
+                if (pureVis) visVal = parseInt(pureVis[1], 10).toString();
+              }
+
+              // Rainfall Extraction (ICAO/WMO Rules)
+              groups = synopPart.split(/\s+/);
+              let rfVal = null;
+              let iR = groups[1] ? groups[1][0] : null;
+
+              // Priority 1: 555 0-group (24-hour rainfall, most accurate)
+              let fiveGroupMatch = synopPart.match(
+                /555.*?(?:^|\s)0(\d{4})(?=\s|$)/,
+              );
+              if (fiveGroupMatch) {
+                let val = parseInt(fiveGroupMatch[1], 10);
+                if (val === 0) rfVal = "NIL";
+                else rfVal = (val / 10).toFixed(1);
+              }
+
+              // Priority 2: 6-group after 333 (Section 3)
+              if (!rfVal) {
+                let sec3Match = synopPart.match(/333\s+(.*?)(?:555|$)/);
+                if (sec3Match) {
+                  let rainGroup = sec3Match[1].match(
+                    /(?:^|\s)6(\d{3})[0-9\/](?=\s|$)/,
+                  );
+                  if (rainGroup) {
+                    let rrr = parseInt(rainGroup[1], 10);
+                    if (rrr === 990) rfVal = "TRACE";
+                    else if (rrr > 990 && rrr <= 999)
+                      rfVal = ((rrr - 990) / 10).toFixed(1);
+                    else if (rrr >= 1 && rrr <= 989) rfVal = rrr.toFixed(1);
+                    else if (rrr === 0) rfVal = "NIL";
+                  }
+                }
+              }
+
+              // Priority 3: iR indicator logic (If 3 or 4, precipitation omitted/NIL)
+              if (!rfVal) {
+                if (iR === "3" || iR === "4") {
+                  rfVal = "NIL";
+                }
+              }
+
+              // Priority 4: Global 6-group (Section 1 fallback)
+              if (!rfVal) {
+                let sec1Match = synopPart.split("333")[0];
+                let rainGroup1 = sec1Match.match(
+                  /(?:^|\s)6(\d{3})[0-9\/](?=\s|$)/,
+                );
+                if (rainGroup1) {
+                  let rrr = parseInt(rainGroup1[1], 10);
+                  if (rrr === 990) rfVal = "TRACE";
+                  else if (rrr > 990 && rrr <= 999)
+                    rfVal = ((rrr - 990) / 10).toFixed(1);
+                  else if (rrr >= 1 && rrr <= 989) rfVal = rrr.toFixed(1);
+                  else if (rrr === 0) rfVal = "NIL";
+                }
+              }
+
+              // Priority 5: Comment Fallback
+              if (!rfVal || rfVal === "NIL") {
+                let trfm = c.match(
+                  /(?:TOTAL\s*R\/?F|T\/?R\/?F|TOTAL\s*RAIN)[\s\-:=]+(NIL|TRACE|\d+\.?\d*)/i,
+                );
+                if (trfm) {
+                  rfVal = trfm[1].toUpperCase();
+                } else {
+                  let rfm = c.match(
+                    /(?:R\/?\.?F\.?|RAIN)[\s\-:=]+(NIL|TRACE|\d+\.?\d*)/i,
+                  );
+                  if (rfm) {
+                    rfVal = rfm[1].toUpperCase();
+                  }
+                }
+              }
+
+              if (!rfVal) rfVal = "NIL";
+              let rfStr =
+                rfVal === "NIL" || rfVal === "TRACE" ? rfVal : rfVal + " mm";
+
+              // Add values in exact required order
+              if (wbVal) outComment.push(`WB=${wbVal}`);
+              if (rhVal)
+                outComment.push(`RH=${String(rhVal).padStart(3, "0")}%`);
+              if (visVal) outComment.push(`VIS=${visVal}m`);
+              if (minVisVal) outComment.push(`MIN VIS=${minVisVal}m`);
+
+              // Preserve any additional TS / TSRA data if present
+              let tsMatch = c.match(
+                /(?:^|[\s,;])TS[\s\-:=]+(.*?)(?=\s*(?:W\.?B|R\.?H|R\/?F|MIN\s*VIS|VIS|TSRA|$))/i,
+              );
+              if (tsMatch && !tsMatch[1].match(/^RA/i)) {
+                let val = tsMatch[1].trim();
+                val = val.replace(/[,;]+$/, "").trim();
+                if (val && val !== "NIL") outComment.push(`TS=${val}`);
+              }
+
+              let tsraMatch = c.match(
+                /(?:^|[\s,;])TSRA[\s\-:=]+(.*?)(?=\s*(?:W\.?B|R\.?H|R\/?F|MIN\s*VIS|VIS|TS|$))/i,
+              );
+              if (tsraMatch) {
+                let val = tsraMatch[1].trim();
+                val = val.replace(/[,;]+$/, "").trim();
+                if (val && val !== "NIL") outComment.push(`TSRA=${val}`);
+              }
+
+              outComment.push(`R/F=${rfStr}`);
+
+              let finalStr =
+                synopPart +
+                "=" +
+                (outComment.length > 0 ? " " + outComment.join(" ") : "");
+              comparisonData.push({
+                type: "station",
+                original: line,
+                formatted: finalStr,
+              });
+            }
+          }
+
+          updateFormattedOutput();
+          renderComparisonView();
+          switchFormattedView("raw");
+          document.getElementById("formattedModal").classList.add("active");
+        } catch (error) {
+          console.error("Format Error:", error);
+          showToast("डेटा फॉर्मेट करते समय एक त्रुटि आई।", "error");
+        }
+      }
+
+      function updateFormattedOutput() {
+        const addLineBreaks =
+          document.getElementById("fmtLineBreakToggle").checked;
+        let formattedLines = [];
+        comparisonData.forEach((item) => {
+          if (item.type === "station" && addLineBreaks) {
+            formattedLines.push("");
+          }
+          formattedLines.push(item.formatted);
+        });
+        document.getElementById("formattedOutput").value = formattedLines
+          .join("\n")
+          .trim();
+      }
+
+      function closeFormattedModal() {
+        document.getElementById("formattedModal").classList.remove("active");
+      }
+      function copyFormattedText() {
+        document.getElementById("formattedOutput").select();
+        document.execCommand("copy");
+        showToast("फॉर्मेट किया गया डेटा कॉपी हो गया है!", "success");
+      }
+
+      let comparisonData = [];
+
+      function renderComparisonView() {
+        const container = document.getElementById("compareViewContainer");
+        let html = '<div class="grid grid-cols-2 gap-4 text-sm font-mono">';
+        html +=
+          '<div class="font-bold text-slate-400 border-b border-slate-700 pb-2">Original Input</div>';
+        html +=
+          '<div class="font-bold text-slate-400 border-b border-slate-700 pb-2">Formatted Output</div>';
+
+        comparisonData.forEach((item) => {
+          if (item.type === "header") {
+            html += `<div class="col-span-2 text-indigo-400 mt-4 font-bold border-b border-slate-700 pb-1">${item.original}</div>`;
+          } else {
+            html += `<div class="glass-compare-box p-4 rounded-xl break-words whitespace-pre-wrap text-slate-200 shadow-lg">${item.original}</div>`;
+            html += `<div class="glass-compare-box glass-compare-indigo p-4 rounded-xl break-words whitespace-pre-wrap text-indigo-100 shadow-lg">${item.formatted}</div>`;
+          }
+        });
+        html += "</div>";
+        container.innerHTML = html;
+      }
+
+      function switchFormattedView(viewType) {
+        const rawContainer = document.getElementById("rawViewContainer");
+        const compareContainer = document.getElementById(
+          "compareViewContainer",
+        );
+        const btnRaw = document.getElementById("btnRawView");
+        const btnCompare = document.getElementById("btnCompareView");
+
+        if (viewType === "raw") {
+          rawContainer.classList.remove("hidden");
+          compareContainer.classList.add("hidden");
+          btnRaw.classList.add("active");
+          btnCompare.classList.remove("active");
+        } else {
+          rawContainer.classList.add("hidden");
+          compareContainer.classList.remove("hidden");
+          btnRaw.classList.remove("active");
+          btnCompare.classList.add("active");
+        }
+      }
+
+      let minimalSynopComparisonData = [];
+
+      function updateMinimalSynopOutput() {
+        const addLineBreaks =
+          document.getElementById("minLineBreakToggle").checked;
+        let formattedLines = [];
+        minimalSynopComparisonData.forEach((item) => {
+          if (item.type === "station" && addLineBreaks) {
+            formattedLines.push("");
+          }
+          formattedLines.push(item.formatted);
+        });
+        document.getElementById("minimalSynopOutput").value = formattedLines
+          .join("\n")
+          .trim();
+      }
+
+      function closeMinimalSynopModal() {
+        document.getElementById("minimalSynopModal").classList.remove("active");
+      }
+
+      function copyMinimalSynopText() {
+        document.getElementById("minimalSynopOutput").select();
+        document.execCommand("copy");
+        showToast("डेटा क्लिपबोर्ड पर कॉपी हो गया है!", "success");
+      }
+
+      function renderMinimalSynopComparisonView() {
+        const container = document.getElementById("minCompareViewContainer");
+        let html = '<div class="grid grid-cols-2 gap-4 text-sm font-mono">';
+        html +=
+          '<div class="font-bold text-slate-400 border-b border-slate-700 pb-2">Original Input</div>';
+        html +=
+          '<div class="font-bold text-slate-400 border-b border-slate-700 pb-2">Synop Output</div>';
+
+        minimalSynopComparisonData.forEach((item) => {
+          if (item.type === "header") {
+            html += `<div class="col-span-2 text-purple-400 mt-4 font-bold border-b border-slate-700 pb-1">${item.original}</div>`;
+          } else {
+            html += `<div class="glass-compare-box p-4 rounded-xl break-words whitespace-pre-wrap text-slate-200 shadow-lg">${item.original}</div>`;
+            html += `<div class="glass-compare-box glass-compare-purple p-4 rounded-xl break-words whitespace-pre-wrap text-purple-100 shadow-lg">${item.formatted}</div>`;
+          }
+        });
+        html += "</div>";
+        container.innerHTML = html;
+      }
+
+      function switchMinimalSynopView(viewType) {
+        const rawContainer = document.getElementById("minRawViewContainer");
+        const compareContainer = document.getElementById(
+          "minCompareViewContainer",
+        );
+        const btnRaw = document.getElementById("btnMinRawView");
+        const btnCompare = document.getElementById("btnMinCompareView");
+
+        if (viewType === "raw") {
+          rawContainer.classList.remove("hidden");
+          compareContainer.classList.add("hidden");
+          btnRaw.classList.add("active");
+          btnCompare.classList.remove("active");
+        } else {
+          rawContainer.classList.add("hidden");
+          compareContainer.classList.remove("hidden");
+          btnRaw.classList.remove("active");
+          btnCompare.classList.add("active");
+        }
+      }
+
+      function formatMinimalSynopData() {
+        try {
+          const inputRaw = document.getElementById("synopInput").value.trim();
+          if (!inputRaw) {
+            showToast("कृपया SYNOP डेटा डालें!", "error");
+            return;
+          }
+
+          const combinedLines = preprocessSynopInput(inputRaw);
+          minimalSynopComparisonData = [];
+
+          for (let i = 0; i < combinedLines.length; i++) {
+            let line = combinedLines[i];
+
+            if (
+              line.match(/^(?:HAPPY\s*)?NEW\s*YEAR/i) ||
+              line.match(
+                /^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i,
+              ) ||
+              line.match(/^(SMIN|SIIN|AAXX|BBXX)/i)
+            ) {
+              minimalSynopComparisonData.push({
+                type: "header",
+                original: line,
+                formatted: line,
+              });
+            } else if (line.match(/^(\d{5})(?:\s|=|$)/)) {
+              let eqIndex = line.indexOf("=");
+              let synopPart = line;
+              let commentPart = "";
+
+              if (eqIndex !== -1) {
+                synopPart = line.substring(0, eqIndex).trim();
+                commentPart = line.substring(eqIndex + 1).trim();
+              }
+
+              let groups = synopPart.split(" ");
+              let stationCode = groups[0];
+
+              if (
+                groups.length <= 1 ||
+                (groups.length === 2 && !/\d/.test(groups[1]))
+              ) {
+                let namePart =
+                  commentPart ||
+                  (groups.length > 1 ? groups.slice(1).join(" ") : "");
+                let finalStr = `${stationCode} NA=`;
+
+                if (namePart) {
+                  let cleanName = namePart
+                    .replace(/^[\s=]+/, "")
+                    .replace(/^NA[\s=]*/i, "")
+                    .trim();
+                  if (cleanName) finalStr += " " + cleanName;
+                }
+
+                minimalSynopComparisonData.push({
+                  type: "station",
+                  original: line,
+                  formatted: finalStr,
+                });
+                continue;
+              }
+
+              synopPart = synopPart.replace(/\s+/g, " ");
+
+              let c = commentPart.replace(/°C?/gi, "").trim();
+              let wbVal = null;
+              let rhVal = null;
+              let outComment = [];
+
+              let wbm = c.match(/W\/?\.?B\.?[\s\-:=]+(\d+(?:\.\d+)?)/i);
+              if (wbm) wbVal = parseFloat(wbm[1]).toFixed(1);
+
+              let rhm = c.match(/R\/?\.?H\.?[\s\-:=]+(\d+(?:\.\d+)?)/i);
+              if (rhm) rhVal = Math.round(parseFloat(rhm[1])).toString();
+
+              let slashMatch = c.match(
+                /(\d+(?:\.\d+)?)\s*[\/;,]\s*(?:rh[\s\-:=]*)?(\d+(?:\.\d+)?)%?/i,
+              );
+              if (slashMatch) {
+                let val1 = parseFloat(slashMatch[1]);
+                let val2 = parseFloat(slashMatch[2]);
+                let isVal1WB = slashMatch[1].includes(".") || val1 < 40;
+
+                if (isVal1WB) {
+                  if (!wbVal) wbVal = val1.toFixed(1);
+                  if (!rhVal) rhVal = Math.round(val2).toString();
+                } else {
+                  if (!rhVal) rhVal = Math.round(val1).toString();
+                  if (!wbVal) wbVal = val2.toFixed(1);
+                }
+              }
+
+              if (!rhVal) {
+                let pureRh = c.match(/\b(\d{2,3})\s*%\b/);
+                if (pureRh) rhVal = parseInt(pureRh[1], 10).toString();
+              }
+
+              groups = synopPart.split(/\s+/);
+              let rfVal = null;
+              let iR = groups[1] ? groups[1][0] : null;
+
+              let fiveGroupMatch = synopPart.match(
+                /555.*?(?:^|\s)0(\d{4})(?=\s|$)/,
+              );
+              if (fiveGroupMatch) {
+                let val = parseInt(fiveGroupMatch[1], 10);
+                if (val === 0) rfVal = "NIL";
+                else rfVal = (val / 10).toFixed(1);
+              }
+
+              if (!rfVal) {
+                let sec3Match = synopPart.match(/333\s+(.*?)(?:555|$)/);
+                if (sec3Match) {
+                  let rainGroup = sec3Match[1].match(/(?:^|\s)6(\d{3})0-9\//);
+                  if (rainGroup) {
+                    let rrr = parseInt(rainGroup[1], 10);
+                    if (rrr === 990) rfVal = "TRACE";
+                    else if (rrr > 990 && rrr <= 999)
+                      rfVal = ((rrr - 990) / 10).toFixed(1);
+                    else if (rrr >= 1 && rrr <= 989) rfVal = rrr.toFixed(1);
+                    else if (rrr === 0) rfVal = "NIL";
+                  }
+                }
+              }
+
+              if (!rfVal) {
+                if (iR === "3" || iR === "4") {
+                  rfVal = "NIL";
+                }
+              }
+
+              if (!rfVal) {
+                let sec1Match = synopPart.split("333")[0];
+                let rainGroup1 = sec1Match.match(/(?:^|\s)6(\d{3})0-9\//);
+                if (rainGroup1) {
+                  let rrr = parseInt(rainGroup1[1], 10);
+                  if (rrr === 990) rfVal = "TRACE";
+                  else if (rrr > 990 && rrr <= 999)
+                    rfVal = ((rrr - 990) / 10).toFixed(1);
+                  else if (rrr >= 1 && rrr <= 989) rfVal = rrr.toFixed(1);
+                  else if (rrr === 0) rfVal = "NIL";
+                }
+              }
+
+              if (!rfVal || rfVal === "NIL") {
+                let trfm = c.match(
+                  /(?:TOTAL\s*R\/?F|T\/?R\/?F|TOTAL\s*RAIN)[\s\-:=]+(NIL|TRACE|\d+\.?\d*)/i,
+                );
+                if (trfm) {
+                  rfVal = trfm[1].toUpperCase();
+                } else {
+                  let rfm = c.match(
+                    /(?:\b|,)R\/?\.?F\.?[\s\-:=]+(NIL|TRACE|\d+\.?\d*)/i,
+                  );
+                  if (rfm) {
+                    rfVal = rfm[1].toUpperCase();
+                  } else {
+                    let rfm2 = c.match(
+                      /(?:\b|,)RAIN(?!\s+IN)[\s\-:=]+(NIL|TRACE|\d+\.?\d*)/i,
+                    );
+                    if (rfm2) {
+                      rfVal = rfm2[1].toUpperCase();
+                    } else {
+                      let rfEqMatch = line.match(
+                        /(?:R\/?\.?F\.?|RAIN|TOTAL\s*R\/?F|T\/?R\/?F)[\s\-:=]+(NIL|TRACE|\d+\.?\d*)/i,
+                      );
+                      if (rfEqMatch) rfVal = rfEqMatch[1].toUpperCase();
+                    }
+                  }
+                }
+              }
+
+              if (!rfVal) rfVal = "NIL";
+              let rfStr =
+                rfVal === "NIL" || rfVal === "TRACE" ? rfVal : rfVal + " mm";
+
+              if (wbVal) outComment.push(`WB=${wbVal}`);
+              if (rhVal)
+                outComment.push(`RH=${String(rhVal).padStart(3, "0")}%`);
+              outComment.push(`R/F=${rfStr}`);
+
+              let finalStr =
+                synopPart +
+                "=" +
+                (outComment.length > 0 ? " " + outComment.join(" ") : "");
+              minimalSynopComparisonData.push({
+                type: "station",
+                original: line,
+                formatted: finalStr,
+              });
+            }
+          }
+
+          updateMinimalSynopOutput();
+          renderMinimalSynopComparisonView();
+          switchMinimalSynopView("raw");
+          document.getElementById("minimalSynopModal").classList.add("active");
+        } catch (error) {
+          console.error("Format Error:", error);
+          showToast("डेटा फॉर्मेट करते समय एक त्रुटि आई।", "error");
+        }
+      }
+
+      // Initialize
+      document.addEventListener("DOMContentLoaded", () => {
+        initDatePicker();
+        updateAvailableDatesList();
+
+        // Visitor Count Display
+        let count = localStorage.getItem("page_views") || 1117;
+        const el = document.getElementById("visitorCount");
+        if (el) el.innerText = count;
+
+        // Theme initialization
+        const savedTheme = localStorage.getItem("synop_theme");
+        if (savedTheme === "light") {
+          document.body.classList.add("light-theme");
+          updateThemeIcon(true);
+        } else {
+          updateThemeIcon(false);
+        }
+
+        // Auto-hide empty state on input
+        document
+          .getElementById("synopInput")
+          .addEventListener("input", function () {
+            const emptyState = document.getElementById("emptyState");
+            if (this.value.trim().length > 0) {
+              emptyState.classList.add("hidden");
+            } else if (
+              document.getElementById("resultsContainer").innerHTML.trim() ===
+              ""
+            ) {
+              emptyState.classList.remove("hidden");
+            }
+          });
+
+        // Keyboard shortcuts
+        document.addEventListener("keydown", (e) => {
+          // Ctrl + Enter for Decode & Store
+          if (e.ctrlKey && e.key === "Enter") {
+            e.preventDefault();
+            decodeAndStoreSynop();
+          }
+          // Ctrl + M for Minimal Synop Format
+          else if (e.ctrlKey && e.key.toLowerCase() === "m") {
+            e.preventDefault();
+            formatMinimalSynopData();
+          }
+          // Alt + S for Submission System
+          else if (e.altKey && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            formatForSubmission();
+          }
+          // Alt + F for Formatted Synop
+          else if (e.altKey && e.key.toLowerCase() === "f") {
+            e.preventDefault();
+            formatSynopData();
+          }
+          // Alt + C for Clear
+          else if (e.altKey && e.key.toLowerCase() === "c") {
+            e.preventDefault();
+            clearAll();
+          }
+          // Alt + D for Database View
+          else if (e.altKey && e.key.toLowerCase() === "d") {
+            e.preventDefault();
+            showDatabaseView();
+          }
+          // Alt + E for Export JSON
+          else if (e.altKey && e.key.toLowerCase() === "e") {
+            e.preventDefault();
+            exportDatabase();
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
